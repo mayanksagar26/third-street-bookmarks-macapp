@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src-tauri/target/
+
+# Your collection and settings live in ~/.tsb — never in the repo.
+bookmarks.json
+settings.json
+*.log
+
+.DS_Store
+.vite/

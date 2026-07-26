@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- App icon. Follows Apple's macOS grid: the rounded square occupies 824 of
+       1024pt with a 185pt corner radius, leaving the margin the OS expects
+       around a Big Sur-era icon. The mark is the same bookmark ribbon as the
+       web favicon, scaled to sit on the icon's optical centre. -->
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1b2735"/>
+      <stop offset="100%" stop-color="#0b1119"/>
+    </linearGradient>
+    <linearGradient id="ribbon" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#42b2f7"/>
+      <stop offset="100%" stop-color="#1d9bf0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#plate)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="none"
+        stroke="#2f3336" stroke-width="4"/>
+
+  <path d="M646 258H378a58 58 0 0 0-58 58v450l192-83 192 83V316a58 58 0 0 0-58-58z"
+        fill="url(#ribbon)"/>
+</svg>

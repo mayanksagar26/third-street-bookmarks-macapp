@@ -1,0 +1,66 @@
+/* Splash shown while the Express sidecar comes up. Uses the app's own tokens
+   from index.css so there's no flash of a different theme at handoff. */
+
+.tsb-boot {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg, #000);
+  color: var(--text-primary, #e7e9ea);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.tsb-boot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  text-align: center;
+  padding: 0 32px;
+}
+
+.tsb-boot-mark {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.tsb-boot-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border, #2f3336);
+  border-top-color: var(--accent, #1d9bf0);
+  border-radius: 50%;
+  animation: tsb-boot-spin 0.7s linear infinite;
+}
+
+@keyframes tsb-boot-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tsb-boot-spinner { animation-duration: 2.4s; }
+}
+
+.tsb-boot-note {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary, #71767b);
+}
+
+.tsb-boot-note code {
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-elevated, #0f0f0f);
+  border: 1px solid var(--border, #2f3336);
+}
+
+.tsb-boot-error {
+  font-size: 14px;
+  color: var(--like, #f91880);
+}

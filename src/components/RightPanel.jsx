@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
-import { SOURCES, CAPABILITY_TOOLS, CAPABILITY_LABELS, getSource, sourceProvides } from '../sources';
+import { SOURCES, getSource } from '../sources';
 // Note: syncSettingsOpen uses simple toggle — no outside-click needed since it's inline
 
 const TOOLS = [
@@ -44,8 +44,6 @@ export default function RightPanel({
   syncSource, onSetSyncSource, sourceInfo = [],
 }) {
   const source = getSource(syncSource);
-  // Capability-gated tools: shown always, but locked unless the active source provides them.
-  const capTools = CAPABILITY_TOOLS.map(t => ({ ...t, unlocked: sourceProvides(syncSource, t.cap) }));
   const installedMap = Object.fromEntries(sourceInfo.map(s => [s.id, s.installed]));
   const [menuOpen, setMenuOpen]               = useState(false);
   const [syncSettingsOpen, setSyncSettingsOpen] = useState(false);
@@ -105,28 +103,6 @@ export default function RightPanel({
               </button>
             ))}
 
-            {/* Source-gated tools — unlock when a richer source is active */}
-            <div className="profile-menu-divider">
-              <span>Unlocked by {source.label}</span>
-            </div>
-            {capTools.map(tool => (
-              <button
-                key={tool.id}
-                className={`profile-menu-item ${activeMode === tool.id ? 'active' : ''} ${tool.unlocked ? '' : 'locked'}`}
-                disabled={!tool.unlocked}
-                title={tool.unlocked ? '' : `Switch sync source to a backend that provides ${CAPABILITY_LABELS[tool.cap]}`}
-                onClick={() => { if (tool.unlocked) { setActiveMode(activeMode === tool.id ? null : tool.id); setMenuOpen(false); } }}
-              >
-                <span className="profile-menu-icon">{tool.unlocked ? '✨' : '🔒'}</span>
-                <div className="profile-menu-info">
-                  <div className="profile-menu-label">{tool.label}</div>
-                  <div className="profile-menu-desc">{tool.unlocked ? tool.desc : 'Requires a richer source'}</div>
-                </div>
-                {activeMode === tool.id && tool.unlocked && (
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-                )}
-              </button>
-            ))}
           </div>
         )}
       </div>
@@ -185,13 +161,6 @@ export default function RightPanel({
               </button>
             ))}
           </div>
-          {/* What the active source unlocks */}
-          <div className="source-caps">
-            {source.provides.map(cap => (
-              <span key={cap} className="source-cap-chip">{CAPABILITY_LABELS[cap] || cap}</span>
-            ))}
-          </div>
-
           <div className="sync-section-label">Classify engine</div>
           <div className="sync-backend-list" style={{ marginBottom: 12 }}>
             {[

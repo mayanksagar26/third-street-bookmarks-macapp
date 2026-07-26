@@ -3,6 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
+const { detectRuntimes, findBinary } = require('./agents');
+const { discover } = require('./discover');
 
 // When the desktop app supervises us, our stdin is a pipe held open by the
 // parent. EOF means the parent is gone — including the case where it was
@@ -37,9 +39,22 @@ const SCRIPT_DIR = process.env.TSB_SCRIPT_DIR
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const BOOKMARKS_JSON = process.env.DATA_PATH
-  ? path.resolve(process.env.DATA_PATH)
-  : path.join(DATA_DIR, 'bookmarks.json');
+const DEFAULT_BOOKMARKS_JSON = path.join(DATA_DIR, 'bookmarks.json');
+
+// Resolved per call rather than frozen at boot: onboarding can point the app at
+// a collection it discovered elsewhere on disk, and that has to take effect
+// without a restart. Precedence is explicit override, then the user's choice,
+// then the app's own directory.
+function bookmarksPath() {
+  if (process.env.DATA_PATH) return path.resolve(process.env.DATA_PATH);
+  try {
+    const chosen = readSettings().bookmarksPath;
+    if (chosen && fs.existsSync(chosen)) return path.resolve(chosen);
+  } catch {
+    // Unreadable settings shouldn't take the feed down with them.
+  }
+  return DEFAULT_BOOKMARKS_JSON;
+}
 
 const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
 const FT = path.join(os.homedir(), '.npm-global/bin/ft');
@@ -55,12 +70,6 @@ const SOURCES = {
     label: 'Field Theory',
     provides: ['bookmarks'],
     bins: [FT, path.join(os.homedir(), '.npm-global/bin/ft'), '/usr/local/bin/ft', '/opt/homebrew/bin/ft'],
-  },
-  birdclaw: {
-    id: 'birdclaw',
-    label: 'birdclaw',
-    provides: ['bookmarks', 'likes', 'mentions', 'media', 'threads', 'digests', 'accounts'],
-    bins: ['/usr/local/bin/birdclaw', '/opt/homebrew/bin/birdclaw', path.join(os.homedir(), '.npm-global/bin/birdclaw'), path.join(os.homedir(), '.local/bin/birdclaw')],
   },
 };
 
@@ -119,7 +128,7 @@ function openDb() {
 
 
 // ── App-owned State DB (source of truth for YOUR actions) ─────────────────────
-// Lives at ~/.tsb/state.db, independent of Field Theory / birdclaw. Owns read,
+// Lives at ~/.tsb/state.db, independent of the sync source. Owns read,
 // favourite, colour-label, note and per-author voice prefs, keyed by tweet id.
 // Applied on every read, so no sync from any source can ever reset your history.
 const STATE_DB_PATH = process.env.STATE_DB
@@ -172,7 +181,7 @@ function migrateState(conn) {
   if (userStateEmpty) {
     let seeded = 0;
     try {
-      const data = JSON.parse(fs.readFileSync(BOOKMARKS_JSON, 'utf8'));
+      const data = JSON.parse(fs.readFileSync(bookmarksPath(), 'utf8'));
       const ins = conn.prepare(`INSERT OR IGNORE INTO user_state (id, is_read, fav_folder, color_label, note, updated_at) VALUES (?, ?, ?, ?, ?, ?)`);
       const tx = conn.transaction(rows => {
         for (const b of rows) {
@@ -211,7 +220,7 @@ function migrateState(conn) {
           ins.run(r.id, r.fav_folder, now);
         }
         try {
-          const data = JSON.parse(fs.readFileSync(BOOKMARKS_JSON, 'utf8'));
+          const data = JSON.parse(fs.readFileSync(bookmarksPath(), 'utf8'));
           for (const b of data) for (const f of (b.favFolders || [])) if (f) ins.run(b.id, f, now);
         } catch {}
       });
@@ -359,12 +368,12 @@ function writeSettings(data) {
 function readBookmarks() {
   // A fresh install has no collection yet — that's an empty feed, not a 500.
   // The UI's empty state tells the user to run a sync.
-  if (!fs.existsSync(BOOKMARKS_JSON)) return [];
-  return JSON.parse(fs.readFileSync(BOOKMARKS_JSON, 'utf8'));
+  if (!fs.existsSync(bookmarksPath())) return [];
+  return JSON.parse(fs.readFileSync(bookmarksPath(), 'utf8'));
 }
 
 function writeBookmarks(data) {
-  fs.writeFileSync(BOOKMARKS_JSON, JSON.stringify(data, null, 2));
+  fs.writeFileSync(bookmarksPath(), JSON.stringify(data, null, 2));
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -394,81 +403,72 @@ app.get('/api/sources', (req, res) => {
   });
 });
 
-// ── birdclaw-only feature endpoints (read its SQLite directly) ────────────────
-const BIRDCLAW_DB_PATH = path.join(os.homedir(), '.birdclaw', 'birdclaw.sqlite');
-const BC_EXPORT_PY = path.join(SCRIPT_DIR, 'birdclaw_export.py');
-
-function openBirdclawDb() {
-  if (!fs.existsSync(BIRDCLAW_DB_PATH)) return null;
+// ── AI runtimes ───────────────────────────────────────────────────────────────
+// Which coding CLIs are on this machine, which version, and whether they're
+// signed in. Onboarding blocks on this, so it must always answer.
+app.get('/api/agents/detect', async (req, res) => {
   try {
-    const Database = require('better-sqlite3');
-    return new Database(BIRDCLAW_DB_PATH, { readonly: true });
-  } catch { return null; }
-}
-
-// Liked tweets — export via birdclaw_export.py --stdout (reuses the mapper).
-app.get('/api/birdclaw/likes', (req, res) => {
-  if (!fs.existsSync(BIRDCLAW_DB_PATH)) return res.json({ ok: false, msg: 'No birdclaw DB — run `birdclaw init`', items: [] });
-  const proc = spawn('python3', [BC_EXPORT_PY, '--kind', 'likes', '--stdout'], {
-    env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH },
-  });
-  let out = '', err = '';
-  proc.stdout.on('data', d => { out += d.toString(); });
-  proc.stderr.on('data', d => { err += d.toString(); });
-  proc.on('close', code => {
-    if (code !== 0) return res.json({ ok: false, msg: err.trim() || 'export failed', items: [] });
-    try { res.json({ ok: true, items: JSON.parse(out) }); }
-    catch { res.json({ ok: false, msg: 'parse error', items: [] }); }
-  });
-  proc.on('error', e => res.json({ ok: false, msg: e.message, items: [] }));
-});
-
-// Inbox triage — AI-ranked mentions from the ai_scores table joined to tweets.
-app.get('/api/birdclaw/inbox', (req, res) => {
-  const db = openBirdclawDb();
-  if (!db) return res.json({ ok: false, msg: 'No birdclaw DB — run `birdclaw init`', items: [] });
-  try {
-    const rows = db.prepare(`
-      SELECT s.entity_id AS id, s.score, s.summary, s.reasoning,
-             t.text, t.created_at, p.handle, p.display_name, p.avatar_url
-      FROM ai_scores s
-      LEFT JOIN tweets t   ON t.id = s.entity_id
-      LEFT JOIN profiles p ON p.id = t.author_profile_id
-      ORDER BY s.score DESC
-      LIMIT 100
-    `).all();
-    db.close();
-    res.json({ ok: true, items: rows.map(r => ({
-      id: r.id, score: r.score, summary: r.summary, reasoning: r.reasoning,
-      text: r.text, postedAt: r.created_at,
-      authorHandle: r.handle, authorName: r.display_name, authorProfileImageUrl: r.avatar_url,
-    })) });
+    const runtimes = await detectRuntimes();
+    const settings = readSettings();
+    res.json({ runtimes, active: settings.aiBackend || 'claude' });
   } catch (e) {
-    try { db.close(); } catch {}
-    res.json({ ok: false, msg: e.message, items: [] });
+    res.status(500).json({ error: e.message, runtimes: [] });
   }
 });
 
-// AI digest — runs birdclaw's own digest command (needs the CLI + Node 25).
-app.get('/api/birdclaw/digest', (req, res) => {
-  const bin = resolveBin('birdclaw');
-  if (!bin) return res.json({ ok: false, needsCli: true, msg: 'birdclaw CLI not found — install it (needs Node ≥25) to generate digests', text: '' });
-  const period = req.query.period === 'week' ? ['digest', 'week'] : ['today'];
-  const proc = spawn(bin, period, { env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH } });
-  let out = '', err = '';
-  proc.stdout.on('data', d => { out += d.toString(); });
-  proc.stderr.on('data', d => { err += d.toString(); });
-  proc.on('close', code => {
-    if (code !== 0) {
-      const nodeVer = /ERR_INVALID_MODULE|esm\/resolve|Unsupported engine|SyntaxError/.test(err);
-      const msg = nodeVer
-        ? 'birdclaw needs Node ≥25 to run — upgrade Node, then `birdclaw init` and authenticate'
-        : (err.trim().split('\n').find(l => l.trim() && !l.startsWith('node:')) || 'digest failed');
-      return res.json({ ok: false, needsCli: true, msg, text: '' });
-    }
-    res.json({ ok: true, text: out.trim() });
-  });
-  proc.on('error', e => res.json({ ok: false, needsCli: true, msg: e.message, text: '' }));
+// ── Bookmark discovery ────────────────────────────────────────────────────────
+// Streams NDJSON progress events, then a final `{ type: 'result', ... }` line.
+// A plain JSON response would leave the user watching a spinner for the length
+// of a filesystem walk plus an agent turn.
+app.post('/api/discover-bookmarks', async (req, res) => {
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const settings = readSettings();
+  const runtime = req.body?.runtime || settings.aiBackend || 'claude';
+  const binary = findBinary(runtime === 'codex' ? 'codex' : 'claude');
+
+  const send = obj => {
+    if (!res.writableEnded) res.write(JSON.stringify(obj) + '\n');
+  };
+
+  try {
+    const result = await discover({
+      runtime,
+      binary,
+      onEvent: event => send({ type: 'progress', ...event }),
+    });
+    send({ type: 'result', ...result, agentAvailable: Boolean(binary) });
+  } catch (e) {
+    send({ type: 'error', message: e.message });
+  }
+  if (!res.writableEnded) res.end();
+});
+
+// Point the app at a discovered collection. Stores the path rather than copying
+// the file, so a later `ft sync` still writes where the user expects.
+app.post('/api/adopt-bookmarks', (req, res) => {
+  const chosen = req.body?.path;
+  if (!chosen) return res.status(400).json({ ok: false, msg: 'path required' });
+
+  const resolved = path.resolve(chosen);
+  if (!fs.existsSync(resolved)) {
+    return res.status(400).json({ ok: false, msg: 'That file no longer exists' });
+  }
+
+  let count = 0;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+    const records = Array.isArray(parsed) ? parsed : parsed?.bookmarks;
+    if (!Array.isArray(records)) throw new Error('not a bookmark array');
+    count = records.length;
+  } catch (e) {
+    return res.status(400).json({ ok: false, msg: `Could not read that file: ${e.message}` });
+  }
+
+  writeSettings({ ...readSettings(), bookmarksPath: resolved });
+  res.json({ ok: true, path: resolved, count });
 });
 
 // ── Voice preferences (per-author → TTS provider/voice), owned by state.db ─────
@@ -802,23 +802,10 @@ app.post('/api/classify-ai', (req, res) => {
 
 // ── Sync & Classify ───────────────────────────────────────────────────────────
 const EXPORT_PY = path.join(SCRIPT_DIR, 'export.py');
-const BIRDCLAW_EXPORT_PY = path.join(SCRIPT_DIR, 'birdclaw_export.py');
-const BIRDCLAW_DB = path.join(os.homedir(), '.birdclaw', 'birdclaw.sqlite');
 
 function runExport(onDone) {
   // export.py reads SQLite → bookmarks.json, preserving colorLabel/note/isRead/favFolder
-  const proc = spawn('python3', [EXPORT_PY, BOOKMARKS_JSON], {
-    env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH },
-  });
-  proc.stdout.on('data', d => logs.classify.push(d.toString()));
-  proc.stderr.on('data', d => logs.classify.push(d.toString()));
-  proc.on('close', code => { if (onDone) onDone(code); });
-  proc.on('error', e => { logs.classify.push(`Export error: ${e.message}\n`); if (onDone) onDone(1); });
-}
-
-function runBirdclawExport(kind, onDone) {
-  // birdclaw_export.py reads ~/.birdclaw/birdclaw.sqlite → bookmarks.json
-  const proc = spawn('python3', [BIRDCLAW_EXPORT_PY, BOOKMARKS_JSON, '--kind', kind], {
+  const proc = spawn('python3', [EXPORT_PY, bookmarksPath()], {
     env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH },
   });
   proc.stdout.on('data', d => logs.classify.push(d.toString()));
@@ -831,7 +818,7 @@ function runBirdclawExport(kind, onDone) {
 // backend onto classify.py's --backend flag. python → regex (offline/OpenAI key).
 function runJsonClassify(classifyBackend, onDone) {
   const backend = classifyBackend === 'codex' ? 'codex' : classifyBackend === 'claude' ? 'claude' : 'regex';
-  const proc = spawn('python3', [CLASSIFY_PY, `--json=${BOOKMARKS_JSON}`, `--backend=${backend}`], {
+  const proc = spawn('python3', [CLASSIFY_PY, `--json=${bookmarksPath()}`, `--backend=${backend}`], {
     env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH },
   });
   proc.stdout.on('data', d => logs.classify.push(d.toString()));
@@ -849,12 +836,6 @@ app.post('/api/syncall', (req, res) => {
   const source = settings.syncSource || 'fieldtheory';
   for (const key of ['sync', 'classify']) { logs[key] = []; status[key] = 'idle'; }
 
-  if (source === 'birdclaw') {
-    const err = runBirdclawSync(settings);
-    if (err) return res.json({ ok: false, msg: err });
-    return res.json({ ok: true });
-  }
-
   // ── Field Theory (default) ──
   if (!resolveBin('fieldtheory')) {
     return res.json({ ok: false, msg: 'ft not installed — bring your own bookmarks.json' });
@@ -862,53 +843,6 @@ app.post('/api/syncall', (req, res) => {
   runFieldTheorySync(settings);
   res.json({ ok: true });
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// birdclaw adapter (https://birdclaw.sh by @steipete). Pipeline:
-//   1. best-effort `birdclaw sync bookmarks` to pull fresh data into its SQLite DB
-//   2. birdclaw_export.py reads ~/.birdclaw/birdclaw.sqlite → bookmarks.json
-//   3. classify.py --json categorizes the result
-//
-// The sync step (1) needs Node >=25.8.1 and X auth (bird/xurl). If it can't run,
-// we still export whatever is already cached in the DB (steps 2-3), so the app
-// shows your existing birdclaw data instead of failing. Returns an error string
-// for a hard precondition failure, or null once the async pipeline has started.
-// ─────────────────────────────────────────────────────────────────────────────
-function runBirdclawSync(settings) {
-  const bin = resolveBin('birdclaw');
-  const haveDb = fs.existsSync(BIRDCLAW_DB);
-  if (!bin && !haveDb) {
-    return 'birdclaw not installed and no DB at ~/.birdclaw — install from https://birdclaw.sh, then run `birdclaw init`';
-  }
-
-  let exported = false;
-  const exportThenClassify = () => {
-    if (exported) return;          // guard: 'error' + 'close' can both fire
-    exported = true;
-    status.sync = 'done';
-    status.classify = 'running';
-    logs.classify.push('Exporting bookmarks from birdclaw…\n');
-    runBirdclawExport('bookmarks', (code) => {
-      if (code !== 0) { status.classify = 'error'; return; }
-      runJsonClassify(settings.classifyBackend || 'python', () => { status.classify = 'done'; });
-    });
-  };
-
-  status.sync = 'running';
-  if (bin) {
-    // best-effort live sync; proceed to export regardless of outcome
-    const started = runProc('sync', bin, ['sync', 'bookmarks', '--mode', 'auto'], () => exportThenClassify());
-    if (!started) { status.sync = 'idle'; return 'A sync is already running'; }
-    procs.sync.on('error', () => {
-      logs.sync.push('birdclaw sync could not start (needs Node 25 + X auth) — exporting cached data\n');
-      exportThenClassify();
-    });
-  } else {
-    logs.sync.push('birdclaw CLI not found — exporting cached DB\n');
-    exportThenClassify();
-  }
-  return null;
-}
 
 function runFieldTheorySync(settings) {
   const FT_BIN = resolveBin('fieldtheory') || FT;
@@ -1001,6 +935,6 @@ if (fs.existsSync(DIST)) {
 app.listen(PORT, () => {
   openStateDb();   // create + migrate the state DB on boot
   console.log(`\n  Bookmark server → http://localhost:${PORT}`);
-  console.log(`  Data:  ${BOOKMARKS_JSON}`);
+  console.log(`  Data:  ${bookmarksPath()}`);
   console.log(`  State: ${STATE_DB_PATH}\n`);
 });

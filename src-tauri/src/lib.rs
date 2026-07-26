@@ -4,7 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use sidecar::{Sidecar, LOG_FILE_NAME};
+use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Manager, WindowEvent};
+use tauri_plugin_opener::OpenerExt;
 
 /// Shared with the browser build of Third Street Bookmarks.
 ///
@@ -40,6 +42,78 @@ fn server_log() -> String {
         .unwrap_or_else(|_| "No server log yet.".to_string())
 }
 
+/// Build the application menu.
+///
+/// Setting a custom menu replaces the default wholesale, so the standard macOS
+/// submenus have to be reconstructed here — without an Edit menu, Cmd+C/V/A
+/// silently stop working in the webview.
+fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let app_menu = Submenu::with_items(
+        app,
+        "Third Street Bookmarks",
+        true,
+        &[
+            &PredefinedMenuItem::about(app, None, Some(AboutMetadata::default()))?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::services(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::hide(app, None)?,
+            &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::show_all(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::quit(app, None)?,
+        ],
+    )?;
+
+    let edit_menu = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ],
+    )?;
+
+    let view_menu = Submenu::with_items(
+        app,
+        "View",
+        true,
+        &[&PredefinedMenuItem::fullscreen(app, None)?],
+    )?;
+
+    let window_menu = Submenu::with_items(
+        app,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::close_window(app, None)?,
+        ],
+    )?;
+
+    let help_menu = Submenu::with_items(
+        app,
+        "Help",
+        true,
+        &[
+            &MenuItem::with_id(app, "show-log", "Show Server Log", true, None::<&str>)?,
+            &MenuItem::with_id(app, "show-data", "Show Data Folder", true, None::<&str>)?,
+        ],
+    )?;
+
+    Menu::with_items(
+        app,
+        &[&app_menu, &edit_menu, &view_menu, &window_menu, &help_menu],
+    )
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -48,6 +122,9 @@ pub fn run() {
         .setup(|app| {
             let data = data_dir();
             std::fs::create_dir_all(&data)?;
+
+            let menu = build_menu(app.handle())?;
+            app.set_menu(menu)?;
 
             // In a bundle this is Contents/Resources; in `tauri dev` it resolves
             // to the crate directory, which is why the dev-mode resource paths
@@ -102,7 +179,40 @@ pub fn run() {
 
             Ok(())
         })
+        .on_menu_event(|app, event| {
+            let data = data_dir();
+            match event.id().as_ref() {
+                "show-log" => {
+                    let log = data.join(LOG_FILE_NAME);
+                    // Opening a path that doesn't exist fails silently, which
+                    // reads as a broken menu item. Touch it first.
+                    if !log.exists() {
+                        let _ = std::fs::write(&log, "");
+                    }
+                    let _ = app.opener().open_path(log.to_string_lossy(), None::<&str>);
+                }
+                "show-data" => {
+                    let _ = app
+                        .opener()
+                        .open_path(data.to_string_lossy(), None::<&str>);
+                }
+                _ => {}
+            }
+        })
         .invoke_handler(tauri::generate_handler![api_port, startup_error, server_log])
-        .run(tauri::generate_context!())
-        .expect("error while running Third Street Bookmarks");
+        .build(tauri::generate_context!())
+        .expect("error while building Third Street Bookmarks")
+        // `RunEvent::Exit` is the only hook that reliably fires on every quit
+        // path. Cmd+Q and the Quit menu item end in `std::process::exit`, which
+        // skips `Drop` — so relying on the Sidecar's destructor, or on
+        // `WindowEvent::Destroyed`, leaks the server process to launchd.
+        .run(|app_handle, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(state) = app_handle.try_state::<AppState>() {
+                    if let Some(sidecar) = &state.sidecar {
+                        sidecar.shutdown();
+                    }
+                }
+            }
+        });
 }

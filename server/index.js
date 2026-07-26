@@ -4,6 +4,17 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 
+// When the desktop app supervises us, our stdin is a pipe held open by the
+// parent. EOF means the parent is gone — including the case where it was
+// SIGKILLed and never got to shut us down — so we exit rather than linger,
+// holding a port and a SQLite handle nobody can reach.
+if (process.env.TSB_SUPERVISED === '1') {
+  process.stdin.resume();
+  process.stdin.on('end', () => process.exit(0));
+  process.stdin.on('close', () => process.exit(0));
+  process.stdin.on('error', () => process.exit(0));
+}
+
 const app = express();
 const PORT = process.env.PORT || 3456;
 
@@ -62,6 +73,22 @@ const EXTRA_PATH = '/usr/local/bin:/opt/homebrew/bin:' + path.join(os.homedir(),
 const DB_PATH = process.env.FT_DB
   ? path.resolve(process.env.FT_DB)
   : path.join(os.homedir(), '.ft-bookmarks', 'bookmarks.db');
+
+// The desktop webview is served from tauri://localhost, so every API call is
+// cross-origin — something the browser build never had to deal with, since
+// there the UI and the API shared :3456.
+//
+// This is safe to keep broad: the server binds 127.0.0.1 only, on a port
+// chosen at launch, so nothing off this machine can reach it in the first
+// place. Narrowing to a fixed origin would buy nothing and break `tauri dev`,
+// which serves from a different origin again.
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -330,6 +357,9 @@ function writeSettings(data) {
 
 // ── Bookmarks I/O ─────────────────────────────────────────────────────────────
 function readBookmarks() {
+  // A fresh install has no collection yet — that's an empty feed, not a 500.
+  // The UI's empty state tells the user to run a sync.
+  if (!fs.existsSync(BOOKMARKS_JSON)) return [];
   return JSON.parse(fs.readFileSync(BOOKMARKS_JSON, 'utf8'));
 }
 

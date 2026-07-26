@@ -72,8 +72,13 @@ impl Sidecar {
             // lookups for `claude`, `codex`, `ft`, `python3` would all miss.
             // Hand it the paths a login shell would have had.
             .env("PATH", augmented_path(&node))
+            // The server exits when this pipe reaches EOF. We never write to
+            // it; its only job is to die with us. A SIGKILL'd app never runs
+            // RunEvent::Exit, but the kernel still closes its fds, so the pipe
+            // is what stops the server outliving a crash.
+            .env("TSB_SUPERVISED", "1")
             .current_dir(resource_dir)
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -88,6 +93,10 @@ impl Sidecar {
         }
 
         let mut child = command.spawn().map_err(SidecarError::Spawn)?;
+
+        // Deliberately not taken from `child`: holding the write end open for
+        // the lifetime of the process is the whole point of the pipe above.
+        debug_assert!(child.stdin.is_some());
 
         let log_path = data_dir.join(LOG_FILE_NAME);
         if let Some(stdout) = child.stdout.take() {

@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import App from './App';
 import { apiUrl } from './api-base';
 
+// Injected by the Rust side before page load; absent in a plain browser, where
+// Vite proxies /api instead.
+const port = typeof window !== 'undefined' ? window.__TSB_API_PORT__ : null;
+
 // Gate the app behind sidecar readiness.
 //
 // Tauri spawns the Express server as a child process at launch. The webview is
@@ -55,9 +59,13 @@ export default function Boot() {
           </>
         ) : (
           <>
-            <div className="tsb-boot-error">Couldn’t start the local server.</div>
+            <div className="tsb-boot-error">Couldn’t reach the local server.</div>
             <div className="tsb-boot-note">
-              Third Street Bookmarks needs Node.js 20+ on your machine.
+              {port ? (
+                <>The server was expected on port <code>{port}</code> but never answered.</>
+              ) : (
+                <>No port reached the window — the app may not have found Node.js 20+.</>
+              )}
               <br />
               Check <code>Help → Show Server Log</code> for details.
             </div>

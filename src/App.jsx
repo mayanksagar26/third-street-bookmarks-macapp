@@ -9,6 +9,7 @@ import ChatWithBookmarks from './components/ChatWithBookmarks';
 import StatsObservations from './components/StatsObservations';
 import BookmarkPodcast from './components/BookmarkPodcast';
 import VoiceBubble from './components/VoiceBubble';
+import Settings from './components/Settings';
 import { DEFAULT_SOURCE } from './sources';
 
 const PAGE_SIZE = 30;
@@ -60,6 +61,15 @@ export default function App() {
   const [selectedCategories, setSelectedCats]   = useState(new Set());
   const [syncState, setSyncState]               = useState({ status: 'idle', msg: '' });
   const [activeMode, setActiveMode]             = useState(null);
+  const [settingsOpen, setSettingsOpen]         = useState(false);
+
+  // The native menu's Settings item (Cmd+,) reaches React through an event,
+  // since the menu lives in Rust and has no other handle on this tree.
+  useEffect(() => {
+    const open = () => setSettingsOpen(true);
+    window.addEventListener('tsb:open-settings', open);
+    return () => window.removeEventListener('tsb:open-settings', open);
+  }, []);
   const [aiBackend, setAiBackend]               = useState('claude');
   const [classifyBackend, setClassifyBackend]   = useState('python');
   const [syncSource, setSyncSource]             = useState(DEFAULT_SOURCE);
@@ -545,6 +555,7 @@ export default function App() {
         )}
       </main>
       <RightPanel
+        onOpenSettings={() => setSettingsOpen(true)}
         bookmarks={allBookmarks}
         currentVoice={currentVoice}
         onVoiceClick={handleVoiceClick}
@@ -560,6 +571,7 @@ export default function App() {
         onSetSyncSource={handleSetSyncSource}
         sourceInfo={sourceInfo}
       />
+      {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
       {voicePlaying && (
         <VoiceBubble
           isPlaying={voicePlaying}

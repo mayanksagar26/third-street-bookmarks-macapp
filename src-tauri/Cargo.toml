@@ -14,9 +14,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-window-state = "2"
+# NSVisualEffectView behind the webview — the real macOS material, not a CSS
+# approximation of one.
+window-vibrancy = "0.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

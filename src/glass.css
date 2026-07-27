@@ -1,0 +1,122 @@
+/* ── Glass edges + view modes ─────────────────────────────────────────────────
+   The window is transparent with an NSVisualEffectView behind it, so anything
+   that doesn't paint an opaque background shows the desktop through real
+   macOS material. That makes the rule here simple: the edges (sidebar, right
+   panel, header) go translucent, and the feed stays solid so text sits on a
+   stable surface and stays readable over whatever is behind the window.
+
+   Everything is scoped to .tsb-glass, which Boot only sets when the Rust side
+   reports a window it actually applied vibrancy to. In a plain browser the app
+   keeps its original opaque theme. */
+
+.tsb-glass body,
+body.tsb-glass {
+  background: transparent;
+}
+
+.tsb-glass .app,
+.tsb-glass .main {
+  background: transparent;
+}
+
+/* Feed column: opaque enough to read against a bright desktop. */
+.tsb-glass .feed,
+.tsb-glass .tweet-card {
+  background: rgba(10, 11, 13, 0.86);
+}
+
+/* Left and right edges: the glass. */
+.tsb-glass .sidebar,
+.tsb-glass .right-panel {
+  background: rgba(14, 15, 18, 0.55);
+  backdrop-filter: blur(22px) saturate(170%);
+  -webkit-backdrop-filter: blur(22px) saturate(170%);
+}
+
+.tsb-glass .sidebar { border-right: 1px solid rgba(255, 255, 255, 0.07); }
+.tsb-glass .right-panel { border-left: 1px solid rgba(255, 255, 255, 0.07); }
+
+.tsb-glass .header {
+  background: rgba(14, 15, 18, 0.62);
+  backdrop-filter: blur(22px) saturate(170%);
+  -webkit-backdrop-filter: blur(22px) saturate(170%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tsb-glass .panel-card {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* The whole window rounds, so the material has an edge to end on. */
+.tsb-glass .app {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+/* Vibrancy is a macOS material; without it the translucency has nothing behind
+   it and reads as washed-out grey. */
+@supports not (backdrop-filter: blur(1px)) {
+  .tsb-glass .sidebar,
+  .tsb-glass .right-panel,
+  .tsb-glass .header {
+    background: rgba(14, 15, 18, 0.96);
+  }
+}
+
+/* ── Popup view mode ──────────────────────────────────────────────────────────
+   Driven by width, not by a class, so dragging the window narrow gets the same
+   layout as choosing Popup from the View menu. The Rust command sets a width
+   that lands on the correct side of this breakpoint. */
+
+@media (max-width: 700px) {
+  .sidebar,
+  .right-panel {
+    display: none;
+  }
+
+  .app {
+    grid-template-columns: 1fr;
+    display: block;
+  }
+
+  .main {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* Reclaim the room the three-column layout reserved. */
+  .feed,
+  .header,
+  .sort-bar,
+  .stats-bar {
+    max-width: 100%;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .stats-bar {
+    overflow-x: auto;
+    gap: 14px;
+  }
+
+  .tweet-card {
+    padding: 12px;
+  }
+
+  /* Traffic lights float over a hidden title bar; keep the first row clear. */
+  .header {
+    padding-top: 26px;
+  }
+}
+
+/* Very narrow: drop to the essentials rather than letting things collide. */
+@media (max-width: 460px) {
+  .sort-bar {
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  .stats-bar {
+    display: none;
+  }
+}

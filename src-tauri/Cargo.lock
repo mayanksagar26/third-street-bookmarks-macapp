@@ -3567,6 +3567,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-opener",
  "tauri-plugin-window-state",
+ "window-vibrancy",
 ]
 
 [[package]]

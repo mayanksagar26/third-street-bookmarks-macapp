@@ -489,3 +489,122 @@
   .ob-foot { flex-direction: column-reverse; align-items: stretch; }
   .ob-foot-right { justify-content: space-between; }
 }
+
+/* ── Settings sheet ──────────────────────────────────────────────────────────
+   Same components as onboarding, same glass, without the sequence. Reached
+   from Cmd+, or the profile menu. */
+
+.set-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: ob-in 0.16s ease;
+}
+
+.set-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, calc(100vw - 40px));
+  max-height: min(720px, calc(100vh - 80px));
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 16px;
+  background: rgba(18, 19, 21, 0.92);
+  backdrop-filter: blur(26px) saturate(160%);
+  -webkit-backdrop-filter: blur(26px) saturate(160%);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+.set-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 10px;
+}
+
+.set-title { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+
+.set-close {
+  font: inherit;
+  font-size: 14px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary, #71767b);
+  cursor: pointer;
+}
+.set-close:hover { background: rgba(255, 255, 255, 0.07); color: var(--text-primary); }
+
+.set-tabs { display: flex; gap: 3px; padding: 0 20px 12px; }
+
+.set-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.set-lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary, #71767b);
+}
+
+.set-divider { height: 1px; background: rgba(255, 255, 255, 0.07); margin: 2px 0; }
+
+.set-field { display: flex; flex-direction: column; gap: 7px; }
+
+.set-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary, #3e4347);
+}
+
+.set-path {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  word-break: break-all;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.set-choices { display: flex; gap: 7px; flex-wrap: wrap; }
+
+.set-choice {
+  font: inherit;
+  flex: 1 1 150px;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.set-choice:hover { border-color: rgba(255, 255, 255, 0.16); }
+.set-choice.active { border-color: var(--accent, #1d9bf0); background: rgba(29, 155, 240, 0.07); }
+
+.set-choice-label { display: block; font-size: 13px; font-weight: 600; }
+.set-choice-hint { display: block; margin-top: 2px; font-size: 11.5px; color: var(--text-secondary); }
+
+@media (max-width: 620px) {
+  .set-panel { width: calc(100vw - 16px); max-height: calc(100vh - 40px); }
+  .set-head, .set-tabs, .set-body { padding-left: 14px; padding-right: 14px; }
+}

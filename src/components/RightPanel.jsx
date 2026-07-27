@@ -42,6 +42,7 @@ export default function RightPanel({
   aiBackend, onSetAiBackend,
   classifyBackend, onSetClassifyBackend,
   syncSource, onSetSyncSource, sourceInfo = [],
+  onOpenSettings,
 }) {
   const source = getSource(syncSource);
   const installedMap = Object.fromEntries(sourceInfo.map(s => [s.id, s.installed]));
@@ -103,6 +104,21 @@ export default function RightPanel({
               </button>
             ))}
 
+            <div className="profile-menu-divider"><span>App</span></div>
+            <button
+              className="profile-menu-item"
+              onClick={() => { setMenuOpen(false); onOpenSettings?.(); }}
+            >
+              <span className="profile-menu-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19.14 12.94a7.6 7.6 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.62l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.24-1.12.55-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.86a.5.5 0 0 0 .12.62l2.03 1.58a7.6 7.6 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.62l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.5.39 1.04.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.24 1.12-.55 1.62-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.62zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/>
+                </svg>
+              </span>
+              <div className="profile-menu-info">
+                <div className="profile-menu-label">Settings</div>
+                <div className="profile-menu-desc">AI, bookmarks, data</div>
+              </div>
+            </button>
           </div>
         )}
       </div>

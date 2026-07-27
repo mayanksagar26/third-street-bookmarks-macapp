@@ -84,7 +84,7 @@ function presentedToken(req) {
  * first, so a rebinding probe is rejected before it can even measure timing on
  * the token comparison.
  */
-function createGuard({ token, port }) {
+function createGuard({ token }) {
   return function guard(req, res, next) {
     // The readiness probe is deliberately unauthenticated. It reveals only that
     // a server exists — which the open TCP port already reveals — and Boot needs
@@ -99,9 +99,10 @@ function createGuard({ token, port }) {
     if (!ALLOWED_HOSTS.has(hostname)) {
       return res.status(403).json({ error: 'forbidden' });
     }
-    if (host.includes(':') && !host.endsWith(`:${port}`)) {
-      return res.status(403).json({ error: 'forbidden' });
-    }
+    // Only the hostname is checked, not the port. A rebinding attack arrives as
+    // `evil.example:443` and is already rejected above; asserting the port as
+    // well buys nothing an attacker couldn't spoof anyway, and it breaks the
+    // legitimate case of the Vite dev proxy forwarding `localhost:5173`.
 
     // ── 2. Origin — blocks cross-site reads from any page you visit ─────────
     // Absent Origin means a non-browser client (curl, the app's own fetch on

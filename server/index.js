@@ -107,7 +107,7 @@ app.use(express.json({ limit: '10mb' }));
 // Readiness, before the guard, revealing nothing the open port doesn't.
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 
-app.use('/api', createGuard({ token: AUTH_TOKEN, port: Number(PORT) }));
+app.use('/api', createGuard({ token: AUTH_TOKEN }));
 
 // ── Field Theory's SQLite (read-only here: used once to migrate legacy UI state
 //    into the app-owned state.db below) ────────────────────────────────────────

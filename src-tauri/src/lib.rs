@@ -42,6 +42,42 @@ fn server_log() -> String {
         .unwrap_or_else(|_| "No server log yet.".to_string())
 }
 
+/// The two shapes this window is meant to take.
+///
+/// Expanded is the reading posture: three columns, room for the feed. Popup is
+/// the glanceable one — a single column you keep beside your work, sized so the
+/// sidebar and right panel drop away rather than being crushed. The CSS
+/// breakpoint and these widths are deliberately set together; resizing by hand
+/// across the boundary switches layout just the same.
+const EXPANDED: (f64, f64) = (1_280.0, 860.0);
+const POPUP: (f64, f64) = (460.0, 720.0);
+
+#[tauri::command]
+fn set_view_mode(window: tauri::WebviewWindow, mode: String) -> Result<(), String> {
+    let (width, height) = if mode == "popup" { POPUP } else { EXPANDED };
+
+    // Below the popup width the layout has nowhere left to go, so the floor
+    // travels with the mode rather than being fixed at build time.
+    window
+        .set_min_size(Some(tauri::LogicalSize::new(
+            if mode == "popup" { 380.0 } else { 880.0 },
+            520.0,
+        )))
+        .map_err(|e| e.to_string())?;
+
+    window
+        .set_size(tauri::LogicalSize::new(width, height))
+        .map_err(|e| e.to_string())?;
+
+    // Popup is a companion window; keeping it above the app you're reading
+    // alongside is the entire point of the mode.
+    window
+        .set_always_on_top(mode == "popup")
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 /// Build the application menu.
 ///
 /// Setting a custom menu replaces the default wholesale, so the standard macOS
@@ -54,6 +90,9 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Men
         true,
         &[
             &PredefinedMenuItem::about(app, None, Some(AboutMetadata::default()))?,
+            &PredefinedMenuItem::separator(app)?,
+            // Cmd+, is where every Mac user looks for this first.
+            &MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::services(app, None)?,
             &PredefinedMenuItem::separator(app)?,
@@ -84,7 +123,12 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Men
         app,
         "View",
         true,
-        &[&PredefinedMenuItem::fullscreen(app, None)?],
+        &[
+            &MenuItem::with_id(app, "view-expanded", "Expanded", true, Some("CmdOrCtrl+1"))?,
+            &MenuItem::with_id(app, "view-popup", "Popup", true, Some("CmdOrCtrl+2"))?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::fullscreen(app, None)?,
+        ],
     )?;
 
     let window_menu = Submenu::with_items(
@@ -152,12 +196,16 @@ pub fn run() {
             // command. The token is hex from our own generator, so it needs no
             // escaping, but it is quoted rather than interpolated bare.
             let init = format!(
-                "window.__TSB_API_PORT__ = {};\nwindow.__TSB_API_TOKEN__ = {};",
+                "window.__TSB_API_PORT__ = {};\nwindow.__TSB_API_TOKEN__ = {};\nwindow.__TSB_GLASS__ = {};",
                 port.map(|p| p.to_string())
                     .unwrap_or_else(|| "null".to_string()),
                 token
                     .map(|t| format!("\"{t}\""))
-                    .unwrap_or_else(|| "null".to_string())
+                    .unwrap_or_else(|| "null".to_string()),
+                // Declared up front so the first paint is already glass — a
+                // class added after load would flash opaque first. Retracted
+                // below if the material turns out to be unavailable.
+                cfg!(target_os = "macos")
             );
 
             let window = tauri::WebviewWindowBuilder::new(
@@ -170,8 +218,40 @@ pub fn run() {
             .min_inner_size(880.0, 600.0)
             .title_bar_style(tauri::TitleBarStyle::Overlay)
             .hidden_title(true)
+            .transparent(true)
+            // Explicit: a transparent window that also loses its decorations is
+            // a window with no close button.
+            .decorations(true)
             .initialization_script(&init)
             .build()?;
+
+            // Glass. An NSVisualEffectView sits behind the transparent webview,
+            // so the translucent regions in the CSS — sidebar and right panel —
+            // sample the desktop the way native chrome does. A backdrop-filter
+            // alone can only blur what the page itself drew, which is why the
+            // edges would otherwise look grey rather than alive.
+            #[cfg(target_os = "macos")]
+            {
+                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                // UnderWindowBackground is the material AppKit intends for
+                // "the whole window is glass" — it composites beneath the
+                // window's own chrome. HudWindow is a borderless-panel
+                // material, and using it here cost the traffic lights.
+                if let Err(error) = apply_vibrancy(
+                    &window,
+                    NSVisualEffectMaterial::UnderWindowBackground,
+                    None,
+                    Some(12.0),
+                ) {
+                    // Not fatal: the app is fully usable opaque, and this fails
+                    // on macOS versions that lack the material.
+                    eprintln!("vibrancy unavailable, falling back to opaque: {error}");
+                    let _ = window.eval(
+                        "window.__TSB_GLASS__ = false; \
+                         document.documentElement.classList.remove('tsb-glass');",
+                    );
+                }
+            }
 
             // Stop the server before the process goes away, so it isn't left
             // holding the port or a half-written SQLite file.
@@ -188,6 +268,15 @@ pub fn run() {
         .on_menu_event(|app, event| {
             let data = data_dir();
             match event.id().as_ref() {
+                "settings" => {
+                    // The menu lives in Rust and has no handle on the React
+                    // tree; an event is the seam between them.
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.eval(
+                            "window.dispatchEvent(new CustomEvent('tsb:open-settings'))",
+                        );
+                    }
+                }
                 "show-log" => {
                     let log = data.join(LOG_FILE_NAME);
                     // Opening a path that doesn't exist fails silently, which
@@ -202,10 +291,21 @@ pub fn run() {
                         .opener()
                         .open_path(data.to_string_lossy(), None::<&str>);
                 }
+                mode @ ("view-expanded" | "view-popup") => {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let name = if mode == "view-popup" { "popup" } else { "expanded" };
+                        let _ = set_view_mode(window, name.to_string());
+                    }
+                }
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![api_port, startup_error, server_log])
+        .invoke_handler(tauri::generate_handler![
+            api_port,
+            startup_error,
+            server_log,
+            set_view_mode
+        ])
         .build(tauri::generate_context!())
         .expect("error while building Third Street Bookmarks")
         // `RunEvent::Exit` is the only hook that reliably fires on every quit

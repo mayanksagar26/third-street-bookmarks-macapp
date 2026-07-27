@@ -41,7 +41,10 @@ export default function Boot() {
     async function poll() {
       if (cancelled) return;
       try {
-        const res = await fetch(apiUrl('/api/status'));
+        // /api/health is the one unauthenticated route — readiness has to be
+        // answerable before anything else, and it reveals nothing the open
+        // port doesn't already.
+        const res = await fetch(apiUrl('/api/health'));
         if (res.ok) {
           if (!cancelled) await resolveReady();
           return;

@@ -10,3 +10,6 @@ settings.json
 .DS_Store
 .vite/
 .gstack/
+
+# Per-launch API credential for standalone/dev runs — never commit.
+auth-token

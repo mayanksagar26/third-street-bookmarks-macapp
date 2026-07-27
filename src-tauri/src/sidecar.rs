@@ -46,6 +46,28 @@ impl std::error::Error for SidecarError {}
 pub struct Sidecar {
     child: Mutex<Option<Child>>,
     pub port: u16,
+    /// Shared secret the webview must present on every API call. Generated per
+    /// launch and passed to the server in its environment, so it never reaches
+    /// disk and does not survive the process.
+    pub token: String,
+}
+
+/// Mint a 256-bit token without pulling in an RNG crate.
+///
+/// `getrandom(2)` is the OS CSPRNG on macOS and Linux; a failure here is not
+/// something to paper over with a weaker source, so it panics rather than
+/// falling back to anything guessable.
+fn generate_token() -> String {
+    let mut bytes = [0u8; 32];
+    #[cfg(unix)]
+    {
+        let mut file = std::fs::File::open("/dev/urandom")
+            .expect("cannot open /dev/urandom to generate an auth token");
+        use std::io::Read;
+        file.read_exact(&mut bytes)
+            .expect("cannot read /dev/urandom to generate an auth token");
+    }
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 impl Sidecar {
@@ -57,6 +79,7 @@ impl Sidecar {
     pub fn start(resource_dir: &Path, data_dir: &Path) -> Result<Self, SidecarError> {
         let node = find_node().ok_or(SidecarError::NodeNotFound)?;
         let port = free_port().map_err(SidecarError::NoFreePort)?;
+        let token = generate_token();
 
         let entry = resource_dir.join("server").join("index.js");
         let script_dir = resource_dir.join("python");
@@ -65,6 +88,7 @@ impl Sidecar {
         command
             .arg(&entry)
             .env("PORT", port.to_string())
+            .env("TSB_AUTH_TOKEN", &token)
             .env("TSB_DATA_DIR", data_dir)
             .env("TSB_SCRIPT_DIR", &script_dir)
             .env("NODE_ENV", "production")
@@ -109,6 +133,7 @@ impl Sidecar {
         Ok(Self {
             child: Mutex::new(Some(child)),
             port,
+            token,
         })
     }
 

@@ -140,17 +140,23 @@ pub fn run() {
             };
 
             let port = sidecar.as_ref().map(|s| s.port);
+            let token = sidecar.as_ref().map(|s| s.token.clone());
 
             app.manage(AppState {
                 sidecar: sidecar.clone(),
                 startup_error,
             });
 
-            // The frontend needs the port before its first fetch, so it goes in
-            // as an initialization script rather than an async command.
+            // Port and token both have to be in place before the first fetch,
+            // so they go in as an initialization script rather than an async
+            // command. The token is hex from our own generator, so it needs no
+            // escaping, but it is quoted rather than interpolated bare.
             let init = format!(
-                "window.__TSB_API_PORT__ = {};",
+                "window.__TSB_API_PORT__ = {};\nwindow.__TSB_API_TOKEN__ = {};",
                 port.map(|p| p.to_string())
+                    .unwrap_or_else(|| "null".to_string()),
+                token
+                    .map(|t| format!("\"{t}\""))
                     .unwrap_or_else(|| "null".to_string())
             );
 

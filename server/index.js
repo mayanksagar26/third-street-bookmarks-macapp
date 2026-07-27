@@ -5,6 +5,15 @@ const os = require('os');
 const { spawn } = require('child_process');
 const { detectRuntimes, findBinary } = require('./agents');
 const { discover } = require('./discover');
+const { agentEnv, buildAgentArgs } = require('./agent-run');
+const {
+  createCors,
+  createGuard,
+  resolveToken,
+  securityHeaders,
+  validateBookmarkPath,
+  validatePrompt,
+} = require('./security');
 
 // When the desktop app supervises us, our stdin is a pipe held open by the
 // parent. EOF means the parent is gone — including the case where it was
@@ -85,21 +94,20 @@ const DB_PATH = process.env.FT_DB
 
 // The desktop webview is served from tauri://localhost, so every API call is
 // cross-origin — something the browser build never had to deal with, since
-// there the UI and the API shared :3456.
-//
-// This is safe to keep broad: the server binds 127.0.0.1 only, on a port
-// chosen at launch, so nothing off this machine can reach it in the first
-// place. Narrowing to a fixed origin would buy nothing and break `tauri dev`,
-// which serves from a different origin again.
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.sendStatus(204);
-  next();
-});
+// there the UI and the API shared :3456. That makes CORS mandatory, and makes
+// getting it right mandatory too: a permissive policy here would hand every
+// page you visit a client for this API.
+const AUTH_TOKEN = resolveToken(DATA_DIR);
 
+app.disable('x-powered-by');
+app.use(securityHeaders);
+app.use(createCors());
 app.use(express.json({ limit: '10mb' }));
+
+// Readiness, before the guard, revealing nothing the open port doesn't.
+app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+app.use('/api', createGuard({ token: AUTH_TOKEN, port: Number(PORT) }));
 
 // ── Field Theory's SQLite (read-only here: used once to migrate legacy UI state
 //    into the app-owned state.db below) ────────────────────────────────────────
@@ -465,12 +473,14 @@ app.post('/api/discover-bookmarks', async (req, res) => {
 // Point the app at a discovered collection. Stores the path rather than copying
 // the file, so a later `ft sync` still writes where the user expects.
 app.post('/api/adopt-bookmarks', (req, res) => {
-  const chosen = req.body?.path;
-  if (!chosen) return res.status(400).json({ ok: false, msg: 'path required' });
-
-  const resolved = path.resolve(chosen);
-  if (!fs.existsSync(resolved)) {
-    return res.status(400).json({ ok: false, msg: 'That file no longer exists' });
+  let resolved;
+  try {
+    // Symlink-resolved, home-scoped, .json only. Without this the endpoint is
+    // an arbitrary-file-read probe: the parse result tells a caller whether any
+    // path on the machine exists and what shape it has.
+    resolved = validateBookmarkPath(req.body?.path);
+  } catch (e) {
+    return res.status(400).json({ ok: false, msg: e.message });
   }
 
   let count = 0;
@@ -715,8 +725,12 @@ app.get('/api/tts/voices', async (req, res) => {
 
 // ── AI Chat ───────────────────────────────────────────────────────────────────
 app.post('/api/chat', (req, res) => {
-  const { prompt } = req.body;
-  if (!prompt) return res.status(400).json({ error: 'prompt required' });
+  let prompt;
+  try {
+    prompt = validatePrompt(req.body?.prompt);
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
 
   const settings = readSettings();
   const backend = settings.aiBackend || 'claude';
@@ -725,17 +739,9 @@ app.post('/api/chat', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('X-Accel-Buffering', 'no');
 
-  let cmd, args;
-  if (backend === 'codex') {
-    cmd = 'codex';
-    args = ['--full-auto', '-q', prompt];
-  } else {
-    cmd = 'claude';
-    args = ['-p', prompt];
-  }
-
-  const proc = spawn(cmd, args, {
-    env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH },
+  const cmd = backend === 'codex' ? 'codex' : 'claude';
+  const proc = spawn(cmd, buildAgentArgs(backend, prompt), {
+    env: agentEnv(EXTRA_PATH),
   });
 
   proc.stdout.on('data', d => { if (!res.writableEnded) res.write(d); });
@@ -780,9 +786,9 @@ app.post('/api/classify-ai', (req, res) => {
 
     let cmd, args;
     if (backend === 'codex') {
-      cmd = 'codex'; args = ['--full-auto', '-q', prompt];
+      cmd = 'codex'; args = buildAgentArgs('codex', prompt);
     } else {
-      cmd = 'claude'; args = ['-p', prompt];
+      cmd = 'claude'; args = buildAgentArgs('claude', prompt);
     }
 
     const proc = spawn(cmd, args, {
@@ -900,7 +906,7 @@ function runFieldTheorySync(settings) {
           const batch = unclassified.slice(i, i + batchSize);
           const lines = batch.map((b, idx) => `${idx + 1}. ${(b.text || '').slice(0, 300)}`).join('\n');
           const prompt = `Classify tweets into one of: ${CATEGORIES.join(', ')}. Return ONLY a JSON array. No markdown.\n\n${lines}`;
-          const args2 = classifyBackend === 'codex' ? ['--full-auto', '-q', prompt] : ['-p', prompt];
+          const args2 = buildAgentArgs(classifyBackend === 'codex' ? 'codex' : 'claude', prompt);
 
           const proc = spawn(aiCmd, args2, {
             env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH },
@@ -947,9 +953,13 @@ if (fs.existsSync(DIST)) {
   });
 }
 
-app.listen(PORT, () => {
+// Loopback only. The default (all interfaces) put every bookmark on the local
+// network — verified reachable from another device on the same Wi-Fi — and
+// exposed /api/chat, which spawns a coding agent, to anyone who could reach it.
+app.listen(PORT, '127.0.0.1', () => {
   openStateDb();   // create + migrate the state DB on boot
-  console.log(`\n  Bookmark server → http://localhost:${PORT}`);
+  console.log(`\n  Bookmark server → http://127.0.0.1:${PORT} (loopback only)`);
   console.log(`  Data:  ${bookmarksPath()}`);
   console.log(`  State: ${STATE_DB_PATH}\n`);
+  // The token is deliberately absent from this log; it is the credential.
 });

@@ -19,6 +19,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const { agentEnv, buildAgentArgs, fenceUntrusted } = require('./agent-run');
 
 const HOME = os.homedir();
 
@@ -226,17 +227,19 @@ function askAgent({ runtime, binary, candidates, timeoutMs = 90_000 }) {
       'Prefer larger and more recent collections, and files that already carry category labels.',
       'Ignore samples, fixtures, and test data.',
       '',
-      JSON.stringify(summary, null, 2),
+      // Paths and sample text come off the disk, so anyone who can drop a file
+      // in the home directory can put words in this prompt. Fence them.
+      fenceUntrusted('candidate list', JSON.stringify(summary, null, 2)),
       '',
       'Reply with ONLY a JSON object, no prose and no code fence:',
       '{"index": <number>, "reason": "<one short sentence for the user>"}',
     ].join('\n');
 
-    const args = runtime === 'codex' ? ['--full-auto', '-q', prompt] : ['-p', prompt];
+    const args = buildAgentArgs(runtime, prompt);
     let output = '';
     let settled = false;
 
-    const child = spawn(binary, args, { env: { ...process.env } });
+    const child = spawn(binary, args, { env: agentEnv() });
 
     const finish = value => {
       if (settled) return;

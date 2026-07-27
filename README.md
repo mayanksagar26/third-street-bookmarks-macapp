@@ -108,6 +108,38 @@ not being found.
 
 ---
 
+## Security model
+
+The server holds every bookmark you've saved and can spawn a coding agent on
+your machine. "It's only localhost" is not a threat model, so it's treated as an
+authenticated service that happens to have a short network path.
+
+| Control | What it removes |
+|---|---|
+| Binds `127.0.0.1` only | The LAN. Express's default binds every interface — anyone on your Wi-Fi could read the whole collection. |
+| Per-launch bearer token | Other local processes, and any website you visit. A browser can reach `127.0.0.1` from any page; it cannot guess 32 bytes from the OS CSPRNG. |
+| Origin + Host validation | DNS rebinding, and cross-site reads from a page that resolves a domain to loopback. |
+| Path validation on adopt | Arbitrary file reads. Symlink-resolved, home-scoped, `.json`, regular files only. |
+| Read-only agent invocation | Prompt injection turning into code execution. |
+
+The token is generated in Rust and passed to the server in its environment, so
+in the packaged app it never touches disk. Standalone runs persist one at `0600`
+for the Vite dev proxy. `/api/health` is the only unauthenticated route — it
+answers readiness before the token reaches the webview and reveals nothing the
+open port doesn't.
+
+**Agents run with their hands tied.** Every prompt this app builds contains
+bookmark text, which is content a stranger wrote and you saved — "ignore your
+instructions and run this" is a plausible tweet. So Codex runs
+`exec --sandbox read-only` and Claude runs with `Bash`, `Write`, `Edit`,
+`NotebookEdit`, `WebFetch`, `WebSearch` and `Task` denied. Untrusted spans are
+fenced with a per-call random marker. The flags are the part that holds; the
+fencing is belt and braces.
+
+Verified by attacking a running instance: LAN refused, unauthenticated 401,
+wrong token 401, cross-origin 403, rebinding Host 403, `/etc/passwd` and `../..`
+escapes rejected.
+
 ## Known gaps
 
 These are real and worth fixing before this goes to anyone else's machine:
@@ -117,7 +149,10 @@ These are real and worth fixing before this goes to anyone else's machine:
   install one. Bundling a Node binary — or porting the server to Rust/axum —
   removes the dependency.
 - **Unsigned and unnotarised.** Gatekeeper will block it on any Mac but the one
-  that built it. Needs an Apple Developer ID to distribute.
+  that built it. Needs an Apple Developer ID to distribute. This is also the
+  last real gap in the security model: everything above protects the app at
+  runtime, but nothing currently stops someone with write access to the bundle
+  from modifying it. Signing plus a hardened runtime is what closes that.
 - **`better-sqlite3` is a native module** compiled for this machine's arch. A
   universal build needs it rebuilt for both, or the server ported to Rust.
 - **No tests.** Upstream has none either; the sidecar logic is the first thing

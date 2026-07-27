@@ -355,9 +355,25 @@ function runProc(key, cmd, args, onDone) {
 }
 
 // ── Settings I/O ──────────────────────────────────────────────────────────────
+const SETTINGS_DEFAULTS = {
+  aiBackend: 'claude',
+  classifyBackend: 'python',
+  syncSource: 'fieldtheory',
+};
+
 function readSettings() {
-  try { return JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8')); }
-  catch { return { aiBackend: 'claude', classifyBackend: 'python', syncSource: 'fieldtheory' }; }
+  let stored;
+  try { stored = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8')); }
+  catch { return { ...SETTINGS_DEFAULTS }; }
+
+  const settings = { ...SETTINGS_DEFAULTS, ...stored };
+
+  // Settings outlive the code that wrote them. A source that has since been
+  // removed — birdclaw, in the desktop build — would otherwise leave the UI
+  // pointing at a backend that no longer exists.
+  if (!SOURCES[settings.syncSource]) settings.syncSource = SETTINGS_DEFAULTS.syncSource;
+
+  return settings;
 }
 
 function writeSettings(data) {
@@ -833,7 +849,6 @@ app.post('/api/syncall', (req, res) => {
   }
 
   const settings = readSettings();
-  const source = settings.syncSource || 'fieldtheory';
   for (const key of ['sync', 'classify']) { logs[key] = []; status[key] = 'idle'; }
 
   // ── Field Theory (default) ──

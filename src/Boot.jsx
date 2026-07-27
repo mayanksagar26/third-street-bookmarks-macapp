@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import App from './App';
+import Onboarding from './components/Onboarding';
 import { apiUrl } from './api-base';
 
 // Injected by the Rust side before page load; absent in a plain browser, where
@@ -17,7 +18,21 @@ const POLL_INTERVAL_MS = 150;
 const GIVE_UP_AFTER_MS = 30_000;
 
 export default function Boot() {
-  const [state, setState] = useState('waiting'); // waiting | ready | failed
+  const [state, setState] = useState('waiting'); // waiting | onboarding | ready | failed
+
+  // Settings decide which of the two ready states we land in. Read once the
+  // server answers, since it's the server that owns settings.json.
+  const resolveReady = useCallback(async () => {
+    try {
+      const res = await fetch(apiUrl('/api/settings'));
+      const settings = await res.json();
+      setState(settings?.onboarded ? 'ready' : 'onboarding');
+    } catch {
+      // Settings unreadable — the app itself still works, so don't trap the
+      // user in setup over it.
+      setState('ready');
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,7 +43,7 @@ export default function Boot() {
       try {
         const res = await fetch(apiUrl('/api/status'));
         if (res.ok) {
-          if (!cancelled) setState('ready');
+          if (!cancelled) await resolveReady();
           return;
         }
       } catch {
@@ -44,8 +59,16 @@ export default function Boot() {
 
     poll();
     return () => { cancelled = true; };
+  }, [resolveReady]);
+
+  // Re-runnable from the app, so setup isn't a one-shot you can never see again.
+  useEffect(() => {
+    const replay = () => setState('onboarding');
+    window.addEventListener('tsb:run-onboarding', replay);
+    return () => window.removeEventListener('tsb:run-onboarding', replay);
   }, []);
 
+  if (state === 'onboarding') return <Onboarding onFinish={() => setState('ready')} />;
   if (state === 'ready') return <App />;
 
   return (

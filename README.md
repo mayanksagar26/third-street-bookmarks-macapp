@@ -1,13 +1,115 @@
 # Third Street Bookmarks — Mac App
 
-A native macOS build of [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks).
-Same reader, packaged as a real `.app` you install and launch from the dock —
-no terminal, no `localhost:3456` tab.
+A native macOS app that turns your X (Twitter) bookmarks into a searchable,
+categorised, listenable library. Everything stays on your Mac. The AI features
+run on the coding CLIs you already have installed — no API key, no upload, no
+account.
 
-This is **Phase 1** of the desktop plan: get the app off localhost and into
-`/Applications`. Phase 2 replaces the one-shot `spawn('claude', ['-p', …])` with
-a proper ACP harness so agents get real sessions, cancellation, and multiple
-providers. See [Roadmap](#roadmap).
+![The feed](docs/screenshots/02-feed.png)
+
+---
+
+## Install
+
+Two ways in. Pick whichever you prefer.
+
+### Option A — let your coding CLI do it
+
+If you have [Claude Code](https://claude.ai/code) or
+[Codex CLI](https://github.com/openai/codex), open a terminal in the folder you
+want the project to live in, start the CLI, and paste this:
+
+```text
+Clone https://github.com/mayanksagar26/third-street-bookmarks-macapp and set it up
+for me on macOS.
+
+Do all of this:
+1. Check I have the prerequisites: macOS 11+, Node.js 20+, Rust 1.77+, Python 3.9+.
+   If any are missing, install them with Homebrew and tell me what you installed.
+2. git clone the repo and cd into it.
+3. Run: npm install && npm install --prefix server
+4. Build the app: npm run app:build
+5. Copy the built app from src-tauri/target/release/bundle/macos/ into /Applications
+6. The build is unsigned, so clear the quarantine flag:
+   xattr -cr "/Applications/Third Street Bookmarks.app"
+7. Launch it and tell me if it opened.
+
+If any step fails, read the error, fix it, and continue. Report what you did.
+```
+
+The CLI handles the prerequisites, the build, and the Gatekeeper workaround.
+
+### Option B — do it yourself
+
+```bash
+git clone https://github.com/mayanksagar26/third-street-bookmarks-macapp.git
+cd third-street-bookmarks-macapp
+
+npm install
+npm install --prefix server     # express + better-sqlite3 (native module)
+
+npm run app:build               # takes a few minutes on first Rust build
+```
+
+The `.app` and `.dmg` land in `src-tauri/target/release/bundle/`. Drag the `.app`
+into `/Applications`.
+
+**The build is unsigned**, so Gatekeeper will refuse to open it. Clear the
+quarantine attribute once:
+
+```bash
+xattr -cr "/Applications/Third Street Bookmarks.app"
+```
+
+Then launch it normally. (Right-click → Open also works.)
+
+### Requirements
+
+| | | |
+|---|---|---|
+| macOS | 11.0+ | |
+| Node.js | 20+ | **must be installed separately** — see [Known gaps](#known-gaps) |
+| Rust | 1.77+ | build only |
+| Python | 3.9+ | classify / export scripts |
+
+Optional, for the AI features: [Claude Code](https://claude.ai/code) or
+[Codex CLI](https://github.com/openai/codex).
+For syncing bookmarks: [Field Theory](https://github.com/afar1/fieldtheory-cli).
+
+### First run
+
+The app walks you through picking a bookmarks source on first launch. If you
+just want to look around, hit **Skip setup** — it ships with a sample
+collection (`bookmarks.sample.json`) so every screen works before you connect
+anything real.
+
+---
+
+## What it looks like
+
+Onboarding — four steps, skippable:
+
+![Onboarding](docs/screenshots/01-onboarding.png)
+
+**Chat with your bookmarks.** Ask questions in plain English; the AI searches
+your collection and answers in context. Runs on your local Claude Code or Codex
+CLI:
+
+![Chat with bookmarks](docs/screenshots/04-chat.png)
+
+**Stats & observations.** Reading rate, author diversity, category breakdown,
+saving patterns over time:
+
+![Stats and observations](docs/screenshots/05-stats.png)
+
+**Bookmark podcast.** Turn any slice of your collection into an audio digest —
+free browser TTS, or ElevenLabs / Sarvam if you want better voices:
+
+![Bookmark podcast](docs/screenshots/06-podcast.png)
+
+All the AI tools live in one menu:
+
+![Tools menu](docs/screenshots/03-tools.png)
 
 ---
 
@@ -26,7 +128,7 @@ providers. See [Roadmap](#roadmap).
 │    window.__TSB_API_PORT__      ▼           │
 │  ┌──────────────────┐   claude · codex      │
 │  │ Rust supervisor  │   python3 · ft        │
-│  └──────────────────┘   birdclaw            │
+│  └──────────────────┘                       │
 └─────────────────────────────────────────────┘
                     │
                     ▼
@@ -57,31 +159,9 @@ either one and it's the same collection with the same read/favourite history.
 The app bundle itself is read-only, which is why `server/index.js` takes its
 paths from `TSB_DATA_DIR` and `TSB_SCRIPT_DIR` rather than `__dirname/..`.
 
+Your bookmarks never leave this directory. Nothing is uploaded anywhere.
+
 ---
-
-## Requirements
-
-| | |
-|---|---|
-| macOS | 11.0+ |
-| Node.js | 20+ — **must be installed separately** (see [Known gaps](#known-gaps)) |
-| Rust | 1.77+, only to build |
-| Python | 3.9+, for classify/export |
-
-Optional, for the AI features: [Claude Code](https://claude.ai/code) or
-[Codex CLI](https://github.com/openai/codex).
-For syncing: [Field Theory](https://github.com/afar1/fieldtheory-cli) or
-[birdclaw](https://birdclaw.sh).
-
-## Build
-
-```bash
-npm install
-npm install --prefix server   # express + better-sqlite3 (native)
-npm run app:build             # → src-tauri/target/release/bundle/dmg/
-```
-
-The `.dmg` and `.app` land in `src-tauri/target/release/bundle/`.
 
 ## Develop
 
@@ -98,6 +178,13 @@ To work on the frontend alone in a normal browser:
 ```bash
 node server/index.js &   # :3456
 npm run dev              # :5173, proxies /api
+```
+
+To run against the sample collection instead of your real one:
+
+```bash
+DATA_PATH=bookmarks.sample.json node server/index.js &
+npm run dev
 ```
 
 ## Troubleshooting
@@ -149,10 +236,16 @@ These are real and worth fixing before this goes to anyone else's machine:
   install one. Bundling a Node binary — or porting the server to Rust/axum —
   removes the dependency.
 - **Unsigned and unnotarised.** Gatekeeper will block it on any Mac but the one
-  that built it. Needs an Apple Developer ID to distribute. This is also the
-  last real gap in the security model: everything above protects the app at
-  runtime, but nothing currently stops someone with write access to the bundle
-  from modifying it. Signing plus a hardened runtime is what closes that.
+  that built it, which is why the install steps above clear the quarantine flag.
+  Distributing this properly needs an Apple Developer ID. This is also the last
+  real gap in the security model: everything above protects the app at runtime,
+  but nothing currently stops someone with write access to the bundle from
+  modifying it. Signing plus a hardened runtime is what closes that.
+- **The auth token reaches agent subprocesses.** `agentEnv()` in
+  `server/agent-run.js` strips `TSB_AUTH_TOKEN` before spawning an agent, but
+  only two of the seven spawn sites use it. The rest pass the parent environment
+  wholesale. The CLI sandbox still denies `Bash` and network tools, so this is a
+  defence-in-depth gap rather than a live hole — but it should be consistent.
 - **`better-sqlite3` is a native module** compiled for this machine's arch. A
   universal build needs it rebuilt for both, or the server ported to Rust.
 - **No tests.** Upstream has none either; the sidecar logic is the first thing
@@ -178,3 +271,12 @@ an OpenAI-compatible `base_url`) are rows rather than code changes.
 **Phase 4 — drop Node.**
 Port the ~25 Express routes to axum. Single static binary, no runtime
 dependency, universal build.
+
+---
+
+## Credits
+
+Built on [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks),
+powered by [Field Theory](https://github.com/afar1/fieldtheory-cli) by Andrew Farah.
+
+Screenshots show the bundled sample collection, not real bookmark data.

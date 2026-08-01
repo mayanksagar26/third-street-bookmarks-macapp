@@ -9,13 +9,16 @@
   that is dark all the way down loses both names.
 
   ── The design ──────────────────────────────────────────────────────────────
-  Two planes and a horizon. Night above, holding the mark and the instruction.
-  A lit floor below, starting exactly at y=239 where the 128px icons end, so
-  the icons stand on it and their black labels land on light. The icons are
-  the content; everything here defers to them.
+  Two planes and a horizon, and nothing written on either. Night above. A lit
+  floor below, starting exactly at y=179 where the 128px icons end, so the
+  icons stand on it and their black labels land on light.
 
-  Geometry is load-bearing. Icons sit at 180,175 and 480,175 per
-  tauri.conf.json, span y=111..239 at ICON_SIZE 128, and Finder writes each
+  There is no wordmark and no instruction line. The app icon says whose it is,
+  the folder says where it goes, the arrow says what to do. Anything else
+  would be a caption on a sentence that is already complete.
+
+  Geometry is load-bearing. Icons sit at 180,115 and 480,115 per
+  tauri.conf.json, span y=51..179 at ICON_SIZE 128, and Finder writes each
   label just beneath at TEXT_SIZE 16.
 
   Regenerate with: src-tauri/dmg/render.sh
@@ -23,27 +26,18 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* Bundled with the app, so this renders identically offline. */
-  @font-face {
-    font-family: 'Playfair Display';
-    font-style: normal;
-    font-weight: 600 700;
-    src: url('../../public/fonts/playfair-display-latin.woff2') format('woff2');
-  }
-
   html, body { background: #000; }
 
   .dmg {
     position: relative;
     width: 660px;
-    height: 340px;
+    height: 260px;
     overflow: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
     /* The app's own night gradient, sampled from the icon. */
     background:
-      radial-gradient(620px 320px at 10% -22%, rgba(90, 170, 235, 0.15), transparent 62%),
-      radial-gradient(520px 280px at 104% 4%, rgba(255, 255, 255, 0.045), transparent 58%),
-      linear-gradient(168deg, #1c2632 0%, #131821 46%, #0c0d12 100%);
+      radial-gradient(560px 260px at 10% -30%, rgba(90, 170, 235, 0.15), transparent 62%),
+      radial-gradient(480px 230px at 104% -6%, rgba(255, 255, 255, 0.045), transparent 58%),
+      linear-gradient(168deg, #1c2632 0%, #131821 58%, #0c0d12 100%);
   }
 
   /* The rim the app window carries, so the two read as one object. */
@@ -57,39 +51,13 @@
       inset 0 0 0 1px rgba(255, 255, 255, 0.03);
   }
 
-  .mark {
-    position: absolute;
-    top: 46px;
-    left: 0;
-    right: 0;
-    text-align: center;
-    font-family: 'Playfair Display', Georgia, "Times New Roman", serif;
-    font-size: 38px;
-    font-weight: 700;
-    letter-spacing: 3px;
-    /* Optical: letter-spacing pads the right side of the last glyph. */
-    text-indent: 3px;
-    color: #ffffff;
-  }
-
-  .sub {
-    position: absolute;
-    top: 101px;
-    left: 0;
-    right: 0;
-    text-align: center;
-    font-size: 12.5px;
-    letter-spacing: 0.2px;
-    color: rgba(255, 255, 255, 0.4);
-  }
-
   /* The lit floor. Its top edge is the icon baseline, which is why the icons
      look placed rather than floating. */
   .floor {
     position: absolute;
     left: 0;
     right: 0;
-    top: 239px;
+    top: 179px;
     bottom: 0;
     background: linear-gradient(180deg, #f6f7f9 0%, #e9ebf0 100%);
   }
@@ -109,7 +77,7 @@
      not so much that they read as a graphic. */
   .shadow {
     position: absolute;
-    top: 241px;
+    top: 181px;
     height: 12px;
     margin-top: -6px;
     pointer-events: none;
@@ -126,7 +94,7 @@
   /* One thin arrow across the gap, in the night half. */
   .arrow {
     position: absolute;
-    top: 172px;
+    top: 112px;
     left: 268px;
     width: 124px;
     height: 1px;
@@ -152,9 +120,6 @@
 </style>
 
 <div class="dmg">
-  <div class="mark">TSB</div>
-  <div class="sub">Drag the app into your Applications folder</div>
-
   <div class="arrow"></div>
 
   <div class="floor"></div>

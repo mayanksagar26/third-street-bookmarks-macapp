@@ -12,20 +12,20 @@
   --logo-blue-mid: #2cacff;
   --logo-blue-deep: #1d7fd6;
 
-  /* ── Grey ladder ───────────────────────────────────────────────────────────
-     Six steps of neutral grey — no blue in the greys themselves. Tinting the
-     surfaces made the whole app look blue; the accent is what should carry
-     colour, and it reads far stronger against a black that is actually black.
-     Each surface picks a rung, far enough apart to be told apart. */
-  --grey-100: #cdcdd2;
-  --grey-300: #83838c;
-  --grey-500: #46464e;
-  --grey-700: #232327;
-  --grey-800: #151517;
-  --grey-900: #0b0b0d;
+  /* ── Ladder ────────────────────────────────────────────────────────────────
+     The bottom three rungs are the icon's own body, sampled from it: #1c2632
+     at the top of the mark fading to #0c0d12 at the bottom. That's a black
+     with a cool lean, not a grey — a neutral grey ladder made the app look
+     washed out next to its own Dock icon. */
+  --grey-100: #c6ced9;
+  --grey-300: #79838f;
+  --grey-500: #39424f;
+  --grey-700: #1c2632;
+  --grey-800: #131821;
+  --grey-900: #0c0d12;
 
-  --bg: #08080a;
-  --bg-solid: #0d0d10;
+  --bg: #07080b;
+  --bg-solid: #0c0d12;
   /* Surfaces are translucent by default so the same rules produce glass over
      macOS vibrancy and a tinted panel over the gradient backdrop in a browser.
      White alpha over black stays neutral at every opacity. */
@@ -33,9 +33,9 @@
   --bg-hover: rgba(255, 255, 255, 0.045);
   --border: rgba(255, 255, 255, 0.1);
   --border-strong: rgba(255, 255, 255, 0.18);
-  --text-primary: #f2f2f4;
-  --text-secondary: #8e8e97;
-  --text-tertiary: #5c5c65;
+  --text-primary: #edf0f5;
+  --text-secondary: #828b98;
+  --text-tertiary: #545d69;
   --accent: #37b4ff;
   --accent-hover: #6cc9ff;
   --accent-deep: #1d7fd6;
@@ -53,13 +53,17 @@
      bright specular line where light catches the top rim, a dimmer one at the
      bottom, and a soft shadow underneath. --rim carries that; every raised
      surface takes it. */
-  --glass: rgba(255, 255, 255, 0.055);
-  --glass-raised: rgba(255, 255, 255, 0.09);
-  --glass-panel: rgba(24, 24, 27, 0.62);
+  /* Two kinds of glass, and the difference matters over vibrancy. Panels tint
+     the material *darker* — a white fill over a bright desktop composites to
+     grey, which is what kept washing the app out. Things that sit on top of a
+     panel lift with white, because they need to be lighter than their parent. */
+  --glass: rgba(255, 255, 255, 0.05);
+  --glass-raised: rgba(255, 255, 255, 0.085);
+  --glass-panel: rgba(11, 14, 19, 0.72);
   /* Menus and popovers overlap content, so they get a floor of their own. At
      0.9 the high-contrast text underneath still ghosted through and made the
      menu hard to read; a menu is worth a little less transparency. */
-  --glass-overlay: rgba(17, 17, 20, 0.985);
+  --glass-overlay: rgba(10, 12, 17, 0.985);
   --glass-border: rgba(255, 255, 255, 0.14);
   --glass-blur: blur(30px) saturate(180%);
   --glass-blur-soft: blur(18px) saturate(160%);
@@ -92,9 +96,10 @@ body::before {
   background:
     /* One cool highlight, barely there — enough that the black isn't dead, not
        enough to call the app blue. */
-    radial-gradient(1000px 640px at 6% -14%, rgba(90, 170, 235, 0.07), transparent 58%),
-    radial-gradient(900px 600px at 104% 4%, rgba(255, 255, 255, 0.035), transparent 55%),
-    linear-gradient(168deg, var(--grey-700) 0%, var(--grey-800) 40%, var(--grey-900) 100%);
+    radial-gradient(1000px 640px at 6% -14%, rgba(90, 170, 235, 0.06), transparent 58%),
+    radial-gradient(900px 600px at 104% 4%, rgba(255, 255, 255, 0.025), transparent 55%),
+    /* The icon's own gradient, top to bottom. */
+    linear-gradient(168deg, var(--grey-700) 0%, var(--grey-800) 42%, var(--grey-900) 100%);
 }
 
 /* ── Layout ── */

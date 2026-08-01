@@ -23,7 +23,7 @@ body.tsb-glass {
    colour cast — a warm wallpaper turned the whole app brown. This keeps the
    grey-blue in charge while the material still shows through it. */
 .tsb-glass body::before {
-  opacity: 0.88;
+  opacity: 0.93;
   border-radius: var(--window-radius);
 }
 
@@ -32,12 +32,15 @@ body.tsb-glass {
   background: transparent;
 }
 
-/* Edges go lighter and thinner than the feed: the material is doing visible
-   work there, and the contrast between the two is what makes the columns read
-   as separate panes rather than one flat sheet. */
+/* Every column tints the material darker rather than lighter. Lifting these
+   with white alpha is what turned the window grey: over a bright desktop, a
+   white film composites to grey no matter how thin it is. Tinting toward the
+   icon's ink keeps the app black and still lets the material through — the
+   columns stay separable because they sit at different depths, and the rim
+   highlights below do the rest. */
 .tsb-glass .sidebar,
 .tsb-glass .right-panel {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(14, 18, 25, 0.6);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
 }
@@ -52,7 +55,7 @@ body.tsb-glass {
 }
 
 .tsb-glass .feed {
-  background: rgba(18, 18, 21, 0.58);
+  background: rgba(8, 10, 14, 0.74);
 }
 
 /* ── The window as a pane of glass ────────────────────────────────────────────

@@ -1,0 +1,158 @@
+<!--
+  Source for the disk image background.
+
+  Finder paints this as a static picture — `set background picture of opts`
+  takes an image, and there is no hook to animate it, so the movement has to be
+  drawn rather than played. The chevrons ramp in brightness left to right and
+  the track fades out behind them, which is the same trick a long-exposure
+  photograph uses: the gesture is legible from one frame.
+
+  Geometry is load-bearing. The two wells sit under the icon positions declared
+  in tauri.conf.json (180,180 and 480,180 in a 660x400 window). Finder draws the
+  item name below each icon, so the band from y=200 to y=250 stays clear.
+
+  Regenerate with: src-tauri/dmg/render.sh
+-->
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { background: #000; }
+
+  .dmg {
+    position: relative;
+    width: 660px;
+    height: 400px;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    /* The icon's own gradient, same as the app window. */
+    background:
+      radial-gradient(620px 400px at 8% -18%, rgba(90, 170, 235, 0.14), transparent 60%),
+      radial-gradient(520px 340px at 104% 8%, rgba(255, 255, 255, 0.045), transparent 58%),
+      linear-gradient(168deg, #1c2632 0%, #131821 42%, #0c0d12 100%);
+  }
+
+  /* The same rim the app window carries, so the two read as one object. */
+  .dmg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.035);
+  }
+
+  .mark {
+    position: absolute;
+    top: 44px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: #edf0f5;
+  }
+
+  .sub {
+    position: absolute;
+    top: 76px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 12px;
+    letter-spacing: 0.3px;
+    color: #828b98;
+  }
+
+  /* Seats for the two icons Finder drops on top. Centred on the coordinates in
+     tauri.conf.json, so the icons land inside them. */
+  .well {
+    position: absolute;
+    width: 118px;
+    height: 118px;
+    margin: -59px 0 0 -59px;
+    top: 180px;
+    border-radius: 27px;
+    background: rgba(255, 255, 255, 0.028);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.045);
+  }
+  .well.app  { left: 180px; }
+  .well.apps { left: 480px; }
+
+  /* The trail the icon is about to travel. Dimmest at the start. */
+  .track {
+    position: absolute;
+    top: 180px;
+    left: 252px;
+    width: 156px;
+    height: 2px;
+    margin-top: -1px;
+    background: linear-gradient(
+      to right,
+      rgba(55, 180, 255, 0) 0%,
+      rgba(55, 180, 255, 0.1) 30%,
+      rgba(55, 180, 255, 0.24) 78%,
+      rgba(55, 180, 255, 0) 100%
+    );
+  }
+
+  /* Three chevrons, each brighter and slightly larger than the last. Read left
+     to right they resolve into one arrow moving right. */
+  .chev {
+    position: absolute;
+    top: 180px;
+    width: 13px;
+    height: 13px;
+    margin: -7px 0 0 -6px;
+    border-right: 2px solid #37b4ff;
+    border-top: 2px solid #37b4ff;
+    transform: rotate(45deg);
+  }
+  .chev.a { left: 296px; opacity: 0.22; }
+  .chev.b { left: 316px; opacity: 0.5; }
+  .chev.c { left: 336px; opacity: 0.92; }
+
+  .foot {
+    position: absolute;
+    bottom: 26px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 11px;
+    letter-spacing: 0.6px;
+    color: rgba(84, 93, 105, 0.95);
+  }
+
+  .hint {
+    position: absolute;
+    top: 162px;
+    left: 252px;
+    width: 156px;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: rgba(130, 139, 152, 0.85);
+  }
+</style>
+
+<div class="dmg">
+  <div class="mark">Third Street Bookmarks</div>
+  <div class="sub">Drag the app into your Applications folder</div>
+
+  <div class="well app"></div>
+  <div class="well apps"></div>
+
+  <div class="hint">Drag</div>
+  <div class="track"></div>
+  <div class="chev a"></div>
+  <div class="chev b"></div>
+  <div class="chev c"></div>
+
+  <div class="foot">Local-first · nothing leaves this Mac</div>
+</div>

@@ -105,8 +105,11 @@ export default function Header({
 
   const voices = provider === 'elevenlabs' ? availableVoices : provider === 'sarvam' ? SARVAM_VOICES : [];
 
+  // No inline `position` on .header: it would beat the stylesheet's `sticky`
+  // and the header would scroll away with the feed. `sticky` is a positioned
+  // value, so the voice popover still anchors to it.
   return (
-    <div className="header" style={{ position: 'relative' }}>
+    <div className="header">
       <span className="header-title" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>Third Street Bookmarks</span>
       <div className="search-wrap">
         <span className="search-icon">

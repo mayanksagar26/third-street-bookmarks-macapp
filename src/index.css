@@ -127,19 +127,29 @@ body::before {
 }
 
 /* ── Layout ── */
+/* The window is the frame, not the document. The page itself never scrolls —
+   the layout is exactly one viewport tall and the middle column scrolls inside
+   it, so the sidebar and right panel stay put no matter how far down the feed
+   you are.
+
+   `position: sticky` used to do this and stopped working the moment the glass
+   treatment put `overflow: hidden` on .layout for the rounded corners: that
+   makes .layout the scrollport for its sticky children, and a scrollport that
+   cannot scroll never triggers them. Owning the scroll here is sturdier than
+   depending on no ancestor ever clipping again. */
 .layout {
   display: flex;
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* ── Sidebar ── */
 .sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
-  position: sticky;
-  top: 0;
-  height: 100vh;
+  height: 100%;
+  /* Its own scroll, for when the folder list outgrows the window. */
   overflow-y: auto;
   border-right: 1px solid var(--border);
   padding: 16px 0;
@@ -275,6 +285,9 @@ body::before {
 .main {
   flex: 1;
   min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-right: 1px solid var(--glass-border);
   border-left: 1px solid var(--glass-border);
   scrollbar-width: thin;
@@ -610,7 +623,7 @@ body::before {
 /* ── Right panel ── */
 .right-panel {
   width: 320px; flex-shrink: 0; padding: 16px;
-  position: sticky; top: 0; height: 100vh;
+  height: 100%;
   overflow-y: auto; scrollbar-width: none;
 }
 .right-panel::-webkit-scrollbar { display: none; }
@@ -690,7 +703,9 @@ body::before {
 .mode-container {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  /* Fills the column rather than the viewport: .main owns the height now, and
+     in popup mode the two are not the same number. */
+  height: 100%;
   overflow: hidden;
 }
 .mode-topbar {
@@ -2025,7 +2040,7 @@ kbd {
 /* ── Podcast v2 player ── */
 .podcast-player-v2 {
   display: flex; flex-direction: column;
-  height: 100vh; overflow: hidden;
+  height: 100%; overflow: hidden;
   background: transparent;
 }
 

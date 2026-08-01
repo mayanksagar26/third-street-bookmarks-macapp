@@ -1,18 +1,17 @@
 <!--
   Source for the disk image background.
 
-  It is light on purpose, and this is not a style preference. Finder draws icon
-  labels in near-black in a DMG window whether the Mac is in Light or Dark
-  Mode, and offers no way to change that. Against the dark sheet this started
-  as, "Third Street Bookmarks" and "Applications" came out black on black —
-  effectively invisible. Anything readable has to be light.
-
-  So the sheet stays quiet and gets out of the way: a serif wordmark, one line
-  of instruction, one thin arrow. The icons and their labels are the content.
-
   Geometry is load-bearing. The icons land at the positions declared in
-  tauri.conf.json (180,175 and 480,175 in a 660x340 sheet) and Finder writes
-  the label directly beneath each, so the band from y=210 down stays empty.
+  tauri.conf.json (180,175 and 480,175 in a 660x340 sheet) at ICON_SIZE 128,
+  so each icon spans y=111..239 and Finder writes its label directly beneath,
+  around y=254 at TEXT_SIZE 16.
+
+  That label is the one thing this file has to work around. Finder draws it in
+  near-black in a DMG window whether the Mac is in Light or Dark Mode, and
+  offers no way to change that — on a dark sheet, "Third Street Bookmarks" and
+  "Applications" come out black on black. Hence the two soft light pools at
+  y=254: dark sheet everywhere the eye goes, a lit patch exactly where the
+  black text lands.
 
   Regenerate with: src-tauri/dmg/render.sh
 -->
@@ -27,7 +26,7 @@
     src: url('../../public/fonts/playfair-display-latin.woff2') format('woff2');
   }
 
-  html, body { background: #fff; }
+  html, body { background: #000; }
 
   .dmg {
     position: relative;
@@ -35,38 +34,49 @@
     height: 340px;
     overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-    /* Paper, not a light grey box: warm-neutral, brightest at the top. */
+    /* The app's own night gradient, sampled from the icon. */
     background:
-      radial-gradient(760px 380px at 50% -34%, #ffffff 0%, rgba(255, 255, 255, 0) 70%),
-      linear-gradient(180deg, #f7f8fa 0%, #eef0f4 100%);
+      radial-gradient(620px 340px at 8% -20%, rgba(90, 170, 235, 0.16), transparent 60%),
+      radial-gradient(520px 300px at 104% 6%, rgba(255, 255, 255, 0.05), transparent 58%),
+      linear-gradient(168deg, #1c2632 0%, #131821 42%, #0c0d12 100%);
+  }
+
+  /* The same rim the app window carries, so the two read as one object. */
+  .dmg::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.03);
   }
 
   .mark {
     position: absolute;
-    top: 46px;
+    top: 40px;
     left: 0;
     right: 0;
     text-align: center;
     font-family: 'Playfair Display', Georgia, "Times New Roman", serif;
-    font-size: 27px;
+    font-size: 42px;
     font-weight: 700;
-    letter-spacing: 0.2px;
-    color: #14181f;
+    letter-spacing: 2px;
+    color: #ffffff;
   }
 
   .sub {
     position: absolute;
-    top: 88px;
+    top: 98px;
     left: 0;
     right: 0;
     text-align: center;
     font-size: 12.5px;
-    letter-spacing: 0.1px;
-    color: #78818f;
+    letter-spacing: 0.2px;
+    color: rgba(255, 255, 255, 0.42);
   }
 
-  /* One thin arrow, sized to the gap between the icons. Three stacked chevrons
-     read as decoration; a single stroke reads as an instruction. */
+  /* One thin arrow, sized to the gap between the icons. */
   .arrow {
     position: absolute;
     top: 175px;
@@ -74,7 +84,12 @@
     width: 124px;
     height: 1.5px;
     margin-top: -1px;
-    background: linear-gradient(to right, rgba(120, 129, 143, 0) 0%, #9aa2ae 24%, #78818f 100%);
+    background: linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.3) 24%,
+      rgba(255, 255, 255, 0.6) 100%
+    );
   }
   .arrow::after {
     content: '';
@@ -84,14 +99,39 @@
     width: 9px;
     height: 9px;
     margin: -5px -1px 0 0;
-    border-right: 1.5px solid #78818f;
-    border-top: 1.5px solid #78818f;
+    border-right: 1.5px solid rgba(255, 255, 255, 0.6);
+    border-top: 1.5px solid rgba(255, 255, 255, 0.6);
     transform: rotate(45deg);
   }
+
+  /* Light where the label lands. Elliptical and soft-edged so it reads as the
+     sheet catching light under the icon, not as a box drawn behind text. */
+  .pool {
+    position: absolute;
+    top: 256px;
+    height: 34px;
+    margin-top: -17px;
+    pointer-events: none;
+    /* Sized to the text line and no taller: the icon bottom is at y=239, and a
+       pool that reaches it would put the app icon on a glowing blob. */
+    background: radial-gradient(
+      closest-side ellipse at 50% 50%,
+      rgba(255, 255, 255, 0.88) 0%,
+      rgba(255, 255, 255, 0.7) 52%,
+      rgba(255, 255, 255, 0.22) 78%,
+      rgba(255, 255, 255, 0) 100%
+    );
+  }
+  .pool.app  { left: 180px; width: 236px; margin-left: -118px; }
+  .pool.apps { left: 480px; width: 156px; margin-left: -78px; }
 </style>
 
 <div class="dmg">
-  <div class="mark">Third Street Bookmarks</div>
+  <div class="mark">TSB</div>
   <div class="sub">Drag the app into your Applications folder</div>
+
   <div class="arrow"></div>
+
+  <div class="pool app"></div>
+  <div class="pool apps"></div>
 </div>

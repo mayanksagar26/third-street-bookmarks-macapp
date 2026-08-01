@@ -71,6 +71,29 @@ export default function RightPanel({
 
   const btnClass = `action-btn ${syncState.status !== 'idle' ? syncState.status : ''}`.trim();
 
+  /**
+   * Return to first-run setup.
+   *
+   * There is no account to sign out of — the "session" is just the onboarded
+   * flag, so clearing it is the whole operation. Nothing is destroyed: read
+   * state, favourites, notes and the bookmarks path all live on and are still
+   * there when setup finishes. The flag is cleared on the server rather than
+   * only in memory, so quitting from the setup screen lands back on setup
+   * rather than silently letting you back in.
+   */
+  async function handleLogOut() {
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onboarded: false }),
+      });
+    } catch {
+      // Even if the write fails, honour the click for this session.
+    }
+    window.dispatchEvent(new CustomEvent('tsb:run-onboarding'));
+  }
+
   return (
     <aside className="right-panel">
       {/* Profile / Tools */}
@@ -117,6 +140,21 @@ export default function RightPanel({
               <div className="profile-menu-info">
                 <div className="profile-menu-label">Settings</div>
                 <div className="profile-menu-desc">AI, bookmarks, data</div>
+              </div>
+            </button>
+
+            <button
+              className="profile-menu-item danger"
+              onClick={() => { setMenuOpen(false); handleLogOut(); }}
+            >
+              <span className="profile-menu-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.59L17 17l5-5-5-5zM4 5h8V3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8v-2H4V5z"/>
+                </svg>
+              </span>
+              <div className="profile-menu-info">
+                <div className="profile-menu-label">Log out</div>
+                <div className="profile-menu-desc">Back to setup</div>
               </div>
             </button>
           </div>

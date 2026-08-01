@@ -28,6 +28,20 @@ function isOnlyLink(text) {
   return /^https?:\/\/\S+$/.test((text || '').trim());
 }
 
+/**
+ * Where "View" should go.
+ *
+ * Older exports don't always carry a `url`, and falling back to `#` made the
+ * button silently dead. Handle plus tweet id is enough to rebuild the
+ * canonical link, so only a bookmark missing both ends up with nothing.
+ */
+function tweetUrl(b) {
+  if (b.url) return b.url;
+  const id = b.tweetId || b.id;
+  if (b.authorHandle && id) return `https://x.com/${b.authorHandle}/status/${id}`;
+  return null;
+}
+
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -373,15 +387,17 @@ export default function TweetCard({
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z"/></svg>
             {fmt(b.bookmarkCount)}
           </span>
-          <a
-            className="view-on-x"
-            href={b.url || '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={e => e.stopPropagation()}
-          >
-            View
-          </a>
+          {tweetUrl(b) && (
+            <a
+              className="view-on-x"
+              href={tweetUrl(b)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+            >
+              View
+            </a>
+          )}
         </div>
       </div>
     </div>

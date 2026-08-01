@@ -36,6 +36,42 @@ fn startup_error(state: tauri::State<'_, AppState>) -> Option<String> {
     state.startup_error.clone()
 }
 
+/// Decide whether a link is safe to hand to the OS.
+///
+/// The scheme check is the point, not a formality: these URLs come out of
+/// bookmark data, which is content a stranger wrote. `file://` would hand a
+/// hostile bookmark a way to open local files, and macOS will happily launch a
+/// registered handler for schemes like `ms-msdt:` or `shortcuts://`. Only http
+/// and https get through.
+fn vet_external_url(url: &str) -> Result<String, String> {
+    let parsed = url::Url::parse(url).map_err(|_| "not a valid URL".to_string())?;
+
+    match parsed.scheme() {
+        "http" | "https" => {}
+        other => return Err(format!("refusing to open a {other}: link")),
+    }
+
+    match parsed.host_str() {
+        Some(host) if !host.is_empty() => {}
+        _ => return Err("link has no host".to_string()),
+    }
+
+    Ok(parsed.to_string())
+}
+
+/// Open a link in the user's real browser.
+///
+/// `target="_blank"` does nothing in a webview — there is no tab to open into,
+/// and the app's CSP blocks navigating away from the bundle. So every external
+/// link has to come through here.
+#[tauri::command]
+fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    let safe = vet_external_url(&url)?;
+    app.opener()
+        .open_url(safe, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn server_log() -> String {
     std::fs::read_to_string(data_dir().join(LOG_FILE_NAME))
@@ -304,7 +340,8 @@ pub fn run() {
             api_port,
             startup_error,
             server_log,
-            set_view_mode
+            set_view_mode,
+            open_external
         ])
         .build(tauri::generate_context!())
         .expect("error while building Third Street Bookmarks")
@@ -321,4 +358,45 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::vet_external_url;
+
+    #[test]
+    fn allows_ordinary_web_links() {
+        for url in [
+            "https://x.com/sama/status/123",
+            "http://example.com/path?q=1#frag",
+            "https://xn--80ak6aa92e.com/",
+        ] {
+            assert!(vet_external_url(url).is_ok(), "should allow {url}");
+        }
+    }
+
+    #[test]
+    fn refuses_schemes_that_can_reach_the_machine() {
+        // Bookmark data is written by strangers. These are the shapes that turn
+        // "open a link" into "touch the local system".
+        for url in [
+            "file:///etc/passwd",
+            "file:///Users/someone/.ssh/id_ed25519",
+            "javascript:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "shortcuts://run-shortcut?name=wipe",
+            "ms-msdt:/id",
+            "vscode://file/etc/hosts",
+            "ftp://example.com/x",
+        ] {
+            assert!(vet_external_url(url).is_err(), "should refuse {url}");
+        }
+    }
+
+    #[test]
+    fn refuses_malformed_and_hostless_links() {
+        for url in ["", "not a url", "https://", "http://"] {
+            assert!(vet_external_url(url).is_err(), "should refuse {url:?}");
+        }
+    }
 }

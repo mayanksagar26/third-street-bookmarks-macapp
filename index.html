@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Third Street Bookmarks</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+    <!--
+      Playfair Display is bundled, not fetched. It used to come from Google
+      Fonts, which meant every heading silently fell back to Georgia whenever
+      the machine was offline — and meant an app whose pitch is "nothing
+      leaves this Mac" called a Google server on each launch. The woff2 files
+      are in public/fonts; the @font-face is at the top of index.css.
+    -->
   </head>
   <body>
     <div id="root"></div>

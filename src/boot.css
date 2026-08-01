@@ -7,8 +7,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg, #000);
-  color: var(--text-primary, #e7e9ea);
+  background: var(--bg, #05070c);
+  color: var(--text-primary, #e8edf5);
   -webkit-user-select: none;
   user-select: none;
 }
@@ -32,8 +32,8 @@
 .tsb-boot-spinner {
   width: 22px;
   height: 22px;
-  border: 2px solid var(--border, #2f3336);
-  border-top-color: var(--accent, #1d9bf0);
+  border: 2px solid var(--border, rgba(150,190,245,0.14));
+  border-top-color: var(--accent, #37b4ff);
   border-radius: 50%;
   animation: tsb-boot-spin 0.7s linear infinite;
 }
@@ -49,15 +49,15 @@
 .tsb-boot-note {
   font-size: 13px;
   line-height: 1.6;
-  color: var(--text-secondary, #71767b);
+  color: var(--text-secondary, #8794a9);
 }
 
 .tsb-boot-note code {
   font-size: 12px;
   padding: 1px 5px;
   border-radius: 4px;
-  background: var(--bg-elevated, #0f0f0f);
-  border: 1px solid var(--border, #2f3336);
+  background: var(--bg-elevated, rgba(140,190,255,0.055));
+  border: 1px solid var(--border, rgba(150,190,245,0.14));
 }
 
 .tsb-boot-error {

@@ -1,66 +1,73 @@
-/* ── Glass edges + view modes ─────────────────────────────────────────────────
-   The window is transparent with an NSVisualEffectView behind it, so anything
-   that doesn't paint an opaque background shows the desktop through real
-   macOS material. That makes the rule here simple: the edges (sidebar, right
-   panel, header) go translucent, and the feed stays solid so text sits on a
-   stable surface and stays readable over whatever is behind the window.
+/* ── Glass mode + view modes ──────────────────────────────────────────────────
+   The base theme in index.css is already built out of translucent surfaces —
+   every panel, card, input and popover is an rgba fill over a blur. That means
+   the app looks like glass in a plain browser too, sitting on the blue-black
+   gradient backdrop.
 
-   Everything is scoped to .tsb-glass, which Boot only sets when the Rust side
-   reports a window it actually applied vibrancy to. In a plain browser the app
-   keeps its original opaque theme. */
+   This file is only what changes when there is a real NSVisualEffectView behind
+   the window: the backdrop steps aside so macOS material shows through, and the
+   window gets an edge to end on.
+
+   Everything is scoped to .tsb-glass, which main.jsx only sets when the Rust
+   side reports a window it actually applied vibrancy to. */
 
 .tsb-glass body,
 body.tsb-glass {
   background: transparent;
 }
 
-.tsb-glass .app,
+/* Thin the themed gradient so the desktop reads through it. It stays present —
+   without it the blue in the theme would come and go with the wallpaper. */
+.tsb-glass body::before {
+  opacity: 0.8;
+  /* Matches the window's rounding so the gradient doesn't square off the
+     corners the material rounds. */
+  border-radius: 12px;
+}
+
+.tsb-glass .layout,
 .tsb-glass .main {
   background: transparent;
 }
 
-/* Feed column: opaque enough to read against a bright desktop. */
-.tsb-glass .feed,
-.tsb-glass .tweet-card {
-  background: rgba(10, 11, 13, 0.86);
-}
-
-/* Left and right edges: the glass. */
+/* Edges go thinner than the default so the material is visibly doing work
+   there, while the feed keeps enough floor to stay readable over a bright
+   desktop. */
 .tsb-glass .sidebar,
 .tsb-glass .right-panel {
-  background: rgba(14, 15, 18, 0.55);
-  backdrop-filter: blur(22px) saturate(170%);
-  -webkit-backdrop-filter: blur(22px) saturate(170%);
+  background: rgba(10, 16, 28, 0.42);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 
-.tsb-glass .sidebar { border-right: 1px solid rgba(255, 255, 255, 0.07); }
-.tsb-glass .right-panel { border-left: 1px solid rgba(255, 255, 255, 0.07); }
+.tsb-glass .sidebar { border-right: 1px solid var(--glass-border); }
+.tsb-glass .right-panel { border-left: 1px solid var(--glass-border); }
 
-.tsb-glass .header {
-  background: rgba(14, 15, 18, 0.62);
-  backdrop-filter: blur(22px) saturate(170%);
-  -webkit-backdrop-filter: blur(22px) saturate(170%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.tsb-glass .panel-card {
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+.tsb-glass .feed {
+  background: rgba(8, 13, 23, 0.58);
 }
 
 /* The whole window rounds, so the material has an edge to end on. */
-.tsb-glass .app {
+.tsb-glass .layout {
   border-radius: 12px;
   overflow: hidden;
 }
 
-/* Vibrancy is a macOS material; without it the translucency has nothing behind
-   it and reads as washed-out grey. */
-@supports not (backdrop-filter: blur(1px)) {
+/* Vibrancy is a macOS material; without backdrop-filter the translucency has
+   nothing behind it and reads as washed-out grey, so fall back to solids. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --glass: #0e1420;
+    --glass-raised: #141d2d;
+    --glass-panel: #0a0f1a;
+    --glass-overlay: #111826;
+  }
+
   .tsb-glass .sidebar,
   .tsb-glass .right-panel,
+  .tsb-glass .feed,
   .tsb-glass .header {
-    background: rgba(14, 15, 18, 0.96);
+    background: rgba(10, 14, 24, 0.97);
   }
 }
 
@@ -75,14 +82,15 @@ body.tsb-glass {
     display: none;
   }
 
-  .app {
-    grid-template-columns: 1fr;
+  .layout {
     display: block;
   }
 
   .main {
     width: 100%;
     max-width: 100%;
+    border-left: none;
+    border-right: none;
   }
 
   /* Reclaim the room the three-column layout reserved. */

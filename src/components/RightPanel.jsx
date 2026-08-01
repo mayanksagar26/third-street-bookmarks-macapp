@@ -182,7 +182,7 @@ export default function RightPanel({
             {[
               { id: 'python', label: '🐍 Python', hint: 'regex + optional OpenAI key' },
               { id: 'claude', label: '⚡ Claude Code CLI', hint: 'local claude -p' },
-              { id: 'codex',  label: '🤖 Codex CLI',      hint: 'local codex --full-auto' },
+              { id: 'codex',  label: '🤖 Codex CLI',      hint: 'local codex exec, read-only' },
             ].map(b => (
               <button
                 key={b.id}

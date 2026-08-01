@@ -1,17 +1,22 @@
 <!--
   Source for the disk image background.
 
-  Geometry is load-bearing. The icons land at the positions declared in
-  tauri.conf.json (180,175 and 480,175 in a 660x340 sheet) at ICON_SIZE 128,
-  so each icon spans y=111..239 and Finder writes its label directly beneath,
-  around y=254 at TEXT_SIZE 16.
+  ── The constraint ──────────────────────────────────────────────────────────
+  Finder owns the icon labels. It draws "Third Street Bookmarks" and
+  "Applications" in near-black in a DMG window whatever the Mac's appearance,
+  and exposes no way to recolour them — the bundler can set their size and
+  nothing else. So white label text is not available at any price, and a sheet
+  that is dark all the way down loses both names.
 
-  That label is the one thing this file has to work around. Finder draws it in
-  near-black in a DMG window whether the Mac is in Light or Dark Mode, and
-  offers no way to change that — on a dark sheet, "Third Street Bookmarks" and
-  "Applications" come out black on black. Hence the two soft light pools at
-  y=254: dark sheet everywhere the eye goes, a lit patch exactly where the
-  black text lands.
+  ── The design ──────────────────────────────────────────────────────────────
+  Two planes and a horizon. Night above, holding the mark and the instruction.
+  A lit floor below, starting exactly at y=239 where the 128px icons end, so
+  the icons stand on it and their black labels land on light. The icons are
+  the content; everything here defers to them.
+
+  Geometry is load-bearing. Icons sit at 180,175 and 480,175 per
+  tauri.conf.json, span y=111..239 at ICON_SIZE 128, and Finder writes each
+  label just beneath at TEXT_SIZE 16.
 
   Regenerate with: src-tauri/dmg/render.sh
 -->
@@ -36,59 +41,100 @@
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
     /* The app's own night gradient, sampled from the icon. */
     background:
-      radial-gradient(620px 340px at 8% -20%, rgba(90, 170, 235, 0.16), transparent 60%),
-      radial-gradient(520px 300px at 104% 6%, rgba(255, 255, 255, 0.05), transparent 58%),
-      linear-gradient(168deg, #1c2632 0%, #131821 42%, #0c0d12 100%);
+      radial-gradient(620px 320px at 10% -22%, rgba(90, 170, 235, 0.15), transparent 62%),
+      radial-gradient(520px 280px at 104% 4%, rgba(255, 255, 255, 0.045), transparent 58%),
+      linear-gradient(168deg, #1c2632 0%, #131821 46%, #0c0d12 100%);
   }
 
-  /* The same rim the app window carries, so the two read as one object. */
+  /* The rim the app window carries, so the two read as one object. */
   .dmg::after {
     content: '';
     position: absolute;
     inset: 0;
     pointer-events: none;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.13),
       inset 0 0 0 1px rgba(255, 255, 255, 0.03);
   }
 
   .mark {
     position: absolute;
-    top: 40px;
+    top: 46px;
     left: 0;
     right: 0;
     text-align: center;
     font-family: 'Playfair Display', Georgia, "Times New Roman", serif;
-    font-size: 42px;
+    font-size: 38px;
     font-weight: 700;
-    letter-spacing: 2px;
+    letter-spacing: 3px;
+    /* Optical: letter-spacing pads the right side of the last glyph. */
+    text-indent: 3px;
     color: #ffffff;
   }
 
   .sub {
     position: absolute;
-    top: 98px;
+    top: 101px;
     left: 0;
     right: 0;
     text-align: center;
     font-size: 12.5px;
     letter-spacing: 0.2px;
-    color: rgba(255, 255, 255, 0.42);
+    color: rgba(255, 255, 255, 0.4);
   }
 
-  /* One thin arrow, sized to the gap between the icons. */
+  /* The lit floor. Its top edge is the icon baseline, which is why the icons
+     look placed rather than floating. */
+  .floor {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 239px;
+    bottom: 0;
+    background: linear-gradient(180deg, #f6f7f9 0%, #e9ebf0 100%);
+  }
+
+  /* A hair of light along the edge, the way a surface catches it. */
+  .floor::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -1px;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  /* Contact shadows. Small and faint — enough that the icons have weight,
+     not so much that they read as a graphic. */
+  .shadow {
+    position: absolute;
+    top: 241px;
+    height: 12px;
+    margin-top: -6px;
+    pointer-events: none;
+    background: radial-gradient(
+      closest-side ellipse at 50% 50%,
+      rgba(12, 16, 24, 0.2) 0%,
+      rgba(12, 16, 24, 0.08) 55%,
+      rgba(12, 16, 24, 0) 100%
+    );
+  }
+  .shadow.app  { left: 180px; width: 132px; margin-left: -66px; }
+  .shadow.apps { left: 480px; width: 124px; margin-left: -62px; }
+
+  /* One thin arrow across the gap, in the night half. */
   .arrow {
     position: absolute;
-    top: 175px;
+    top: 172px;
     left: 268px;
     width: 124px;
-    height: 1.5px;
-    margin-top: -1px;
+    height: 1px;
     background: linear-gradient(
       to right,
       rgba(255, 255, 255, 0) 0%,
-      rgba(255, 255, 255, 0.3) 24%,
-      rgba(255, 255, 255, 0.6) 100%
+      rgba(255, 255, 255, 0.22) 26%,
+      rgba(255, 255, 255, 0.5) 100%
     );
   }
   .arrow::after {
@@ -96,34 +142,13 @@
     position: absolute;
     right: 0;
     top: 50%;
-    width: 9px;
-    height: 9px;
-    margin: -5px -1px 0 0;
-    border-right: 1.5px solid rgba(255, 255, 255, 0.6);
-    border-top: 1.5px solid rgba(255, 255, 255, 0.6);
+    width: 8px;
+    height: 8px;
+    margin: -4.5px -1px 0 0;
+    border-right: 1px solid rgba(255, 255, 255, 0.5);
+    border-top: 1px solid rgba(255, 255, 255, 0.5);
     transform: rotate(45deg);
   }
-
-  /* Light where the label lands. Elliptical and soft-edged so it reads as the
-     sheet catching light under the icon, not as a box drawn behind text. */
-  .pool {
-    position: absolute;
-    top: 256px;
-    height: 34px;
-    margin-top: -17px;
-    pointer-events: none;
-    /* Sized to the text line and no taller: the icon bottom is at y=239, and a
-       pool that reaches it would put the app icon on a glowing blob. */
-    background: radial-gradient(
-      closest-side ellipse at 50% 50%,
-      rgba(255, 255, 255, 0.88) 0%,
-      rgba(255, 255, 255, 0.7) 52%,
-      rgba(255, 255, 255, 0.22) 78%,
-      rgba(255, 255, 255, 0) 100%
-    );
-  }
-  .pool.app  { left: 180px; width: 236px; margin-left: -118px; }
-  .pool.apps { left: 480px; width: 156px; margin-left: -78px; }
 </style>
 
 <div class="dmg">
@@ -132,6 +157,7 @@
 
   <div class="arrow"></div>
 
-  <div class="pool app"></div>
-  <div class="pool apps"></div>
+  <div class="floor"></div>
+  <div class="shadow app"></div>
+  <div class="shadow apps"></div>
 </div>

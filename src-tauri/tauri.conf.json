@@ -50,15 +50,15 @@
         "background": "dmg/background.tiff",
         "windowSize": {
           "width": 660,
-          "height": 288
+          "height": 368
         },
         "appPosition": {
           "x": 180,
-          "y": 115
+          "y": 175
         },
         "applicationFolderPosition": {
           "x": 480,
-          "y": 115
+          "y": 175
         }
       }
     }

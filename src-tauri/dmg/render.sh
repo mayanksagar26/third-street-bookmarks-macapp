@@ -24,11 +24,11 @@ done
 if [[ -z "$chrome" ]]; then
   echo "No Chrome-family browser found. Install Chrome, or open" >&2
   echo "  $here/background.html" >&2
-  echo "and export a 1320x520 screenshot of the .dmg element to background@2x.png." >&2
+  echo "and export a 1320x680 screenshot of the .dmg element to background@2x.png." >&2
   exit 1
 fi
 
-# 2x device scale over a 660x260 layout gives the 1320x520 image Finder wants
+# 2x device scale over a 660x340 layout gives the 1320x680 image Finder wants
 # for the HiDPI representation.
 "$chrome" \
   --headless \
@@ -36,7 +36,7 @@ fi
   --hide-scrollbars \
   --default-background-color=00000000 \
   --force-device-scale-factor=2 \
-  --window-size=660,260 \
+  --window-size=660,340 \
   --screenshot="$here/background@2x.png" \
   "file://$here/background.html" >/dev/null 2>&1
 

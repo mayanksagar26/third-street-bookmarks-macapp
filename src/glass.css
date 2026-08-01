@@ -18,11 +18,13 @@ body.tsb-glass {
 
 /* Thin the themed gradient so the desktop reads through it. It stays present —
    without it the blue in the theme would come and go with the wallpaper. */
+/* The themed gradient stays mostly present. Dialled all the way back, the
+   material picks up whatever is on the desktop and the window takes on its
+   colour cast — a warm wallpaper turned the whole app brown. This keeps the
+   grey-blue in charge while the material still shows through it. */
 .tsb-glass body::before {
-  opacity: 0.8;
-  /* Matches the window's rounding so the gradient doesn't square off the
-     corners the material rounds. */
-  border-radius: 12px;
+  opacity: 0.88;
+  border-radius: var(--window-radius);
 }
 
 .tsb-glass .layout,
@@ -30,44 +32,76 @@ body.tsb-glass {
   background: transparent;
 }
 
-/* Edges go thinner than the default so the material is visibly doing work
-   there, while the feed keeps enough floor to stay readable over a bright
-   desktop. */
+/* Edges go lighter and thinner than the feed: the material is doing visible
+   work there, and the contrast between the two is what makes the columns read
+   as separate panes rather than one flat sheet. */
 .tsb-glass .sidebar,
 .tsb-glass .right-panel {
-  background: rgba(10, 16, 28, 0.42);
+  background: rgba(255, 255, 255, 0.06);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
 }
 
-.tsb-glass .sidebar { border-right: 1px solid var(--glass-border); }
-.tsb-glass .right-panel { border-left: 1px solid var(--glass-border); }
-
-.tsb-glass .feed {
-  background: rgba(8, 13, 23, 0.58);
+.tsb-glass .sidebar {
+  border-right: 1px solid var(--glass-border);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
+}
+.tsb-glass .right-panel {
+  border-left: 1px solid var(--glass-border);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.04);
 }
 
-/* The whole window rounds, so the material has an edge to end on. */
+.tsb-glass .feed {
+  background: rgba(30, 37, 49, 0.5);
+}
+
+/* ── The window as a pane of glass ────────────────────────────────────────────
+   Transparency alone doesn't read as glass; the edge does. A real pane catches
+   light along its top rim, holds a faint sheen across the upper-left face, and
+   drops a shadow inside its own border. That's what these two rules draw. */
 .tsb-glass .layout {
-  border-radius: 12px;
+  border-radius: var(--window-radius);
   overflow: hidden;
+}
+
+.tsb-glass .layout::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 100000;          /* above popovers — it is the surface they sit under */
+  pointer-events: none;     /* never eats a click */
+  border-radius: var(--window-radius);
+  /* The specular sheen: strongest at the top-left corner, gone by a third of
+     the way across. */
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.03) 14%, transparent 34%),
+    linear-gradient(to top, rgba(255, 255, 255, 0.035) 0%, transparent 12%);
+  /* The rim: bright along the top edge, softer down the sides, a hairline all
+     the way round so the window has a defined boundary against the desktop. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 1px 0 0 rgba(255, 255, 255, 0.12),
+    inset -1px 0 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 22px 40px -26px rgba(255, 255, 255, 0.16);
 }
 
 /* Vibrancy is a macOS material; without backdrop-filter the translucency has
    nothing behind it and reads as washed-out grey, so fall back to solids. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   :root {
-    --glass: #0e1420;
-    --glass-raised: #141d2d;
-    --glass-panel: #0a0f1a;
-    --glass-overlay: #111826;
+    --glass: var(--grey-700);
+    --glass-raised: var(--grey-500);
+    --glass-panel: var(--grey-800);
+    --glass-overlay: var(--grey-700);
   }
 
   .tsb-glass .sidebar,
   .tsb-glass .right-panel,
   .tsb-glass .feed,
   .tsb-glass .header {
-    background: rgba(10, 14, 24, 0.97);
+    background: var(--grey-800);
   }
 }
 

@@ -12,17 +12,28 @@
   --logo-blue-mid: #2cacff;
   --logo-blue-deep: #1d7fd6;
 
-  --bg: #05070c;
-  --bg-solid: #070a11;
+  /* ── Grey ladder ───────────────────────────────────────────────────────────
+     Five steps of blue-grey, light enough apart to be told apart. The app used
+     to be near-black everywhere, which reads as flat: nothing looked raised
+     because nothing was lighter than anything else. Each surface picks a rung. */
+  --grey-100: #b9c4d6;
+  --grey-300: #6c7a92;
+  --grey-500: #3d4859;
+  --grey-700: #2a3242;
+  --grey-800: #1e2531;
+  --grey-900: #151a24;
+
+  --bg: #12161f;
+  --bg-solid: #171c26;
   /* Surfaces are translucent by default so the same rules produce glass over
      macOS vibrancy and a tinted panel over the gradient backdrop in a browser. */
-  --bg-elevated: rgba(140, 190, 255, 0.055);
-  --bg-hover: rgba(120, 180, 255, 0.05);
-  --border: rgba(150, 190, 245, 0.14);
-  --border-strong: rgba(150, 190, 245, 0.24);
-  --text-primary: #e8edf5;
-  --text-secondary: #8794a9;
-  --text-tertiary: #4d586b;
+  --bg-elevated: rgba(255, 255, 255, 0.07);
+  --bg-hover: rgba(255, 255, 255, 0.055);
+  --border: rgba(255, 255, 255, 0.11);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --text-primary: #eef2f8;
+  --text-secondary: #9aa7bb;
+  --text-tertiary: #6c7a92;
   --accent: #37b4ff;
   --accent-hover: #6cc9ff;
   --accent-deep: #1d7fd6;
@@ -31,17 +42,29 @@
   --bookmark: #37b4ff;
   --sidebar-width: 280px;
   --header-height: 53px;
+  /* Matches the radius handed to apply_vibrancy in lib.rs. If the two drift
+     apart, the material shows as a crescent outside the content's corner. */
+  --window-radius: 14px;
 
-  /* ── Glass tokens ── */
-  --glass: rgba(150, 195, 255, 0.05);
-  --glass-raised: rgba(160, 200, 255, 0.08);
-  --glass-panel: rgba(10, 16, 28, 0.5);
-  /* Menus and popovers overlap content, so they get a floor of their own. */
-  --glass-overlay: rgba(9, 14, 24, 0.86);
-  --glass-border: rgba(255, 255, 255, 0.09);
-  --glass-blur: blur(22px) saturate(170%);
-  --glass-blur-soft: blur(14px) saturate(150%);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.38);
+  /* ── Glass tokens ──────────────────────────────────────────────────────────
+     Real glass reads as glass because of its edge, not its transparency: a
+     bright specular line where light catches the top rim, a dimmer one at the
+     bottom, and a soft shadow underneath. --rim carries that; every raised
+     surface takes it. */
+  --glass: rgba(255, 255, 255, 0.075);
+  --glass-raised: rgba(255, 255, 255, 0.12);
+  --glass-panel: rgba(42, 50, 66, 0.55);
+  /* Menus and popovers overlap content, so they get a floor of their own. At
+     0.9 the high-contrast text underneath still ghosted through and made the
+     menu hard to read; a menu is worth a little less transparency. */
+  --glass-overlay: rgba(28, 34, 46, 0.96);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-blur: blur(30px) saturate(180%);
+  --glass-blur-soft: blur(18px) saturate(160%);
+
+  --rim: inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  --rim-strong: inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -1px 0 rgba(255, 255, 255, 0.07);
+  --glass-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
   --accent-gradient: linear-gradient(135deg, var(--logo-blue) 0%, var(--logo-blue-deep) 100%);
 }
 
@@ -65,10 +88,10 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(1100px 720px at 8% -12%, rgba(55, 180, 255, 0.17), transparent 62%),
-    radial-gradient(900px 620px at 102% 2%, rgba(29, 127, 214, 0.15), transparent 58%),
-    radial-gradient(1000px 780px at 50% 118%, rgba(55, 180, 255, 0.08), transparent 62%),
-    linear-gradient(163deg, var(--logo-navy) 0%, #0a0f1a 42%, var(--logo-ink) 100%);
+    radial-gradient(1100px 720px at 8% -12%, rgba(70, 190, 255, 0.2), transparent 62%),
+    radial-gradient(900px 620px at 102% 2%, rgba(40, 140, 225, 0.17), transparent 58%),
+    radial-gradient(1000px 780px at 50% 118%, rgba(70, 190, 255, 0.1), transparent 62%),
+    linear-gradient(163deg, var(--grey-700) 0%, var(--grey-800) 45%, var(--grey-900) 100%);
 }
 
 /* ── Layout ── */
@@ -187,7 +210,7 @@ body::before {
   background: var(--glass-raised);
   backdrop-filter: var(--glass-blur-soft);
   -webkit-backdrop-filter: var(--glass-blur-soft);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  box-shadow: var(--rim-strong);
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 600;
@@ -197,9 +220,9 @@ body::before {
   text-align: left;
 }
 .action-btn:hover {
-  background: rgba(55, 180, 255, 0.15);
-  border-color: rgba(55, 180, 255, 0.42);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 18px rgba(29, 127, 214, 0.22);
+  background: rgba(55, 180, 255, 0.18);
+  border-color: rgba(55, 180, 255, 0.45);
+  box-shadow: var(--rim-strong), 0 4px 20px rgba(29, 127, 214, 0.3);
 }
 .action-btn.running { border-color: var(--accent); color: var(--accent); cursor: default; }
 .action-btn.done { border-color: var(--repost); color: var(--repost); }
@@ -564,8 +587,8 @@ body::before {
   border: 1px solid var(--glass-border);
   backdrop-filter: var(--glass-blur-soft);
   -webkit-backdrop-filter: var(--glass-blur-soft);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), var(--glass-shadow);
-  border-radius: 16px; padding: 16px; margin-bottom: 16px;
+  box-shadow: var(--rim), var(--glass-shadow);
+  border-radius: 18px; padding: 16px; margin-bottom: 16px;
 }
 /* .panel-card-title extended below with flex layout */
 .top-author {
@@ -713,7 +736,7 @@ body::before {
   background: var(--glass);
   backdrop-filter: var(--glass-blur-soft);
   -webkit-backdrop-filter: var(--glass-blur-soft);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: var(--rim);
   color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
@@ -724,7 +747,7 @@ body::before {
 .chat-chip-item:hover {
   border-color: rgba(55, 180, 255, 0.45);
   background: rgba(55, 180, 255, 0.1);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 4px 18px rgba(29, 127, 214, 0.18);
+  box-shadow: var(--rim-strong), 0 4px 20px rgba(29, 127, 214, 0.24);
 }
 .chat-surprise-btn {
   display: flex;
@@ -800,7 +823,7 @@ body::before {
   background: var(--glass);
   backdrop-filter: var(--glass-blur-soft);
   -webkit-backdrop-filter: var(--glass-blur-soft);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: var(--rim);
   overflow: hidden;
 }
 .chat-results-head {
@@ -1189,7 +1212,11 @@ body::before {
 .voice-ctrl-btn:hover { background: rgba(255,255,255,0.12); }
 
 /* ── Profile menu in right panel ── */
-.profile-card { padding: 0 !important; overflow: visible; position: relative; }
+/* The z-index is load-bearing. `backdrop-filter` makes every .panel-card its
+   own stacking context, so without it the cards below this one paint over the
+   menu that drops out of it — the menu shows as a ghost through the glass
+   instead of on top of it. */
+.profile-card { padding: 0 !important; overflow: visible; position: relative; z-index: 30; }
 .profile-btn {
   display: flex; align-items: center; gap: 10px;
   width: 100%; padding: 12px 14px;
@@ -1880,7 +1907,9 @@ kbd {
 .podcast-count-input:focus { border-color: var(--accent); }
 
 /* ── Topic multi-select picker ── */
-.topic-picker { position: relative; width: 100%; }
+/* z-index for the same reason as .profile-card: glass siblings would otherwise
+   paint over the dropdown. */
+.topic-picker { position: relative; width: 100%; z-index: 30; }
 .topic-picker-trigger {
   width: 100%; display: flex; align-items: center; gap: 8px;
   padding: 9px 12px; border-radius: 10px;

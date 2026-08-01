@@ -273,11 +273,14 @@ pub fn run() {
                 // "the whole window is glass" — it composites beneath the
                 // window's own chrome. HudWindow is a borderless-panel
                 // material, and using it here cost the traffic lights.
+                // The radius has to match --window-radius in index.css. Drift
+                // between the two shows as a crescent of bare material outside
+                // the content's rounded corner.
                 if let Err(error) = apply_vibrancy(
                     &window,
                     NSVisualEffectMaterial::UnderWindowBackground,
                     None,
-                    Some(12.0),
+                    Some(14.0),
                 ) {
                     // Not fatal: the app is fully usable opaque, and this fails
                     // on macOS versions that lack the material.

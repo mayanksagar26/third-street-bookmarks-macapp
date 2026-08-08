@@ -7,6 +7,7 @@ const TOOLS = [
     id: 'chat',
     label: 'Chat with Bookmarks',
     desc: 'Ask questions using AI',
+    shortcut: '⌘K',
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
         <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
@@ -121,6 +122,9 @@ export default function RightPanel({
                   <div className="profile-menu-label">{tool.label}</div>
                   <div className="profile-menu-desc">{tool.desc}</div>
                 </div>
+                {tool.shortcut && activeMode !== tool.id && (
+                  <span className="profile-menu-kbd">{tool.shortcut}</span>
+                )}
                 {activeMode === tool.id && (
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
                 )}

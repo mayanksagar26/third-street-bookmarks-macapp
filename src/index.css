@@ -498,10 +498,33 @@ body::before {
 .fav-folder-check {
   display: flex; align-items: center; gap: 9px;
   flex: 1; min-width: 0; cursor: pointer; user-select: none;
+  background: none; border: none; padding: 0; margin: 0;
+  font: inherit; color: inherit; text-align: left;
 }
-.fav-folder-check input[type="checkbox"] {
-  width: 15px; height: 15px; accent-color: #f59e0b; cursor: pointer; flex-shrink: 0;
+/* Drawn rather than a native checkbox: the real input had to be nested in a
+   label to be clickable, and that nesting double-fired the toggle. */
+.fav-check-box {
+  width: 15px; height: 15px; flex-shrink: 0; border-radius: 4px;
+  border: 1.5px solid var(--text-tertiary); background: transparent;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: transparent; transition: background 0.1s, border-color 0.1s, color 0.1s;
 }
+.fav-check-box.checked { background: #f59e0b; border-color: #f59e0b; color: #000; }
+
+.fav-popup-search {
+  width: 100%; padding: 6px 10px; margin-bottom: 6px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text-primary); font-size: 13px; outline: none;
+  transition: border-color 0.15s;
+}
+.fav-popup-search:focus { border-color: var(--accent); }
+.fav-popup-search::placeholder { color: var(--text-tertiary); }
+.fav-popup-list {
+  max-height: 260px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.fav-popup-empty { padding: 8px; font-size: 13px; color: var(--text-secondary); }
 .fav-folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fav-rename-btn {
   background: none; border: none; color: var(--text-tertiary);
@@ -598,6 +621,10 @@ body::before {
   padding: 1px 7px; min-width: 28px; text-align: center;
 }
 .sidebar-fav-item.active .fav-badge { background: #f59e0b; color: #000; border-color: #f59e0b; }
+.fav-list {
+  max-height: 240px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
 
 /* ── View on X ── */
 .view-on-x {
@@ -1315,6 +1342,16 @@ body::before {
 .profile-menu-info { flex: 1; }
 .profile-menu-label { font-size: 13px; font-weight: 600; }
 .profile-menu-desc { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; }
+.profile-menu-kbd {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  line-height: 1.5;
+}
 
 /* ── Responsive ── */
 /* The layout is full-bleed, so on a wide window the columns grow with it rather

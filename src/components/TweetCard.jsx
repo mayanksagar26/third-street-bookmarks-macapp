@@ -1,4 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+
+/** Folder count past which the picker is worth a search box. */
+const FOLDER_SEARCH_FROM = 5;
 
 const CAT_CLASS = {
   technology:'cat-technology', tech:'cat-technology',
@@ -96,20 +99,45 @@ export default function TweetCard({
   const [renaming, setRenaming]             = useState(null);   // folder being renamed
   const [renameText, setRenameText]         = useState('');
   const [noteText, setNoteText]             = useState(note || '');
+  const [folderSearch, setFolderSearch]     = useState('');
   const favPopupRef   = useRef(null);
   const notePopupRef  = useRef(null);
   const favInputRef   = useRef(null);
+  const favSearchRef  = useRef(null);
   const noteInputRef  = useRef(null);
 
   const isFav = folders.length > 0;
-  // Union of this bookmark's folders and all existing folders, for the picker.
-  const pickerFolders = [...new Set([...allFolders, ...folders])].sort();
+  // allFolders arrives most-recently-used first; keep that order rather than
+  // sorting, so the folders you actually reach for sit at the top.
+  const pickerFolders = useMemo(
+    () => [...new Set([...allFolders, ...folders])],
+    [allFolders, folders],
+  );
+
+  const folderQuery = folderSearch.trim().toLowerCase();
+  // Every folder, in a list that scrolls on its own. Ticked ones lead, so a
+  // bookmark's own folders are always the first thing you see (and can untick)
+  // without having to scroll for them.
+  const visibleFolders = useMemo(() => {
+    const matching = folderQuery
+      ? pickerFolders.filter(f => f.toLowerCase().includes(folderQuery))
+      : pickerFolders;
+    const ticked = matching.filter(f => folders.includes(f));
+    const rest = matching.filter(f => !folders.includes(f));
+    return [...ticked, ...rest];
+  }, [pickerFolders, folders, folderQuery]);
 
   useEffect(() => { setNoteText(note || ''); }, [note]);
 
   useEffect(() => {
-    if (!showFavPopup) return;
-    setTimeout(() => favInputRef.current?.focus(), 50);
+    if (!showFavPopup) {
+      // Next open starts clean rather than mid-search from last time.
+      setFolderSearch('');
+      return;
+    }
+    // Search wins the caret when it exists: with the list capped, typing is far
+    // more likely to mean "find a folder" than "name a new one".
+    setTimeout(() => (favSearchRef.current || favInputRef.current)?.focus(), 50);
     const close = (e) => { if (!favPopupRef.current?.contains(e.target)) setShowFavPopup(false); };
     document.addEventListener('click', close);
     return () => document.removeEventListener('click', close);
@@ -267,40 +295,72 @@ export default function TweetCard({
               {showFavPopup && (
                 <div className="fav-popup" ref={favPopupRef} onClick={e => e.stopPropagation()}>
                   <div className="fav-popup-title">Save in folders</div>
-                  {pickerFolders.map(f => (
-                    <div key={f} className="fav-popup-folder">
-                      {renaming === f ? (
-                        <input
-                          className="fav-rename-input"
-                          autoFocus
-                          value={renameText}
-                          onChange={e => setRenameText(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') commitRename();
-                            else if (e.key === 'Escape') { setRenaming(null); setRenameText(''); }
-                          }}
-                          onBlur={commitRename}
-                        />
-                      ) : (
-                        <>
-                          <label className="fav-folder-check" onClick={e => { e.preventDefault(); toggleFolder(f); }}>
-                            <input type="checkbox" checked={folders.includes(f)} readOnly />
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b">
-                              <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>
-                            </svg>
-                            <span className="fav-folder-name">{f}</span>
-                          </label>
-                          <button
-                            className="fav-rename-btn"
-                            title="Rename folder"
-                            onClick={() => { setRenaming(f); setRenameText(f); }}
-                          >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ))}
+
+                  {pickerFolders.length > FOLDER_SEARCH_FROM && (
+                    <input
+                      ref={favSearchRef}
+                      className="fav-popup-search"
+                      placeholder={`Search ${pickerFolders.length} folders…`}
+                      value={folderSearch}
+                      onChange={e => setFolderSearch(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Escape') setFolderSearch(''); }}
+                    />
+                  )}
+
+                  <div className="fav-popup-list">
+                    {visibleFolders.length === 0 && (
+                      <div className="fav-popup-empty">No folders match</div>
+                    )}
+                    {visibleFolders.map(f => (
+                      <div key={f} className="fav-popup-folder">
+                        {renaming === f ? (
+                          <input
+                            className="fav-rename-input"
+                            autoFocus
+                            value={renameText}
+                            onChange={e => setRenameText(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') commitRename();
+                              else if (e.key === 'Escape') { setRenaming(null); setRenameText(''); }
+                            }}
+                            onBlur={commitRename}
+                          />
+                        ) : (
+                          <>
+                            {/* A button, not a <label> wrapping a checkbox: the label
+                                forwarded activation to the nested input, so clicking
+                                the box or the icon fired this twice across two
+                                renders and the folder toggled straight back off. */}
+                            <button
+                              type="button"
+                              role="checkbox"
+                              aria-checked={folders.includes(f)}
+                              className="fav-folder-check"
+                              onClick={() => toggleFolder(f)}
+                            >
+                              <span className={`fav-check-box${folders.includes(f) ? ' checked' : ''}`}>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
+                                  <path d="M4 12l6 6L20 6"/>
+                                </svg>
+                              </span>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b">
+                                <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>
+                              </svg>
+                              <span className="fav-folder-name">{f}</span>
+                            </button>
+                            <button
+                              className="fav-rename-btn"
+                              title="Rename folder"
+                              onClick={() => { setRenaming(f); setRenameText(f); }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
                   {pickerFolders.length > 0 && <div className="fav-popup-divider" />}
                   <input
                     ref={favInputRef}

@@ -55,6 +55,8 @@ export default function App() {
   const [searchQuery, setSearchQuery]           = useState('');
   const [readIds, setReadIds]                   = useState(new Set());
   const [favMap, setFavMap]                     = useState({});
+  // [{ folder, count, lastUsed }] from state.db, most recently used first.
+  const [knownFolders, setKnownFolders]         = useState([]);
   const [notesMap, setNotesMap]                 = useState({});
   const [currentVoice, setCurrentVoice]         = useState(null);
   const [showUnreadOnly, setShowUnreadOnly]     = useState(true);
@@ -100,6 +102,14 @@ export default function App() {
         setLoading(false);
       })
       .catch(e => { setError(String(e)); setLoading(false); });
+  }, []);
+
+  // The full folder list, including folders with no member in this collection.
+  useEffect(() => {
+    fetch('/api/fav-folders')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setKnownFolders(d); })
+      .catch(() => {});
   }, []);
 
   // Load settings
@@ -155,9 +165,43 @@ export default function App() {
     return () => clearInterval(timer);
   }, [syncState.status]);
 
+  // Latest feed state for the key handler below, which attaches once and so
+  // must not close over any of it. Pinned to the first render, `filtered` was
+  // still empty, `pageItems.length - 1` was -1, and focus could never leave
+  // -1: j/k/r/f did nothing until some unrelated change forced a re-subscribe.
+  const keyStateRef = useRef({ pageItems: [], favMap: {}, activeMode: null, focusedIdx: -1 });
+  useEffect(() => {
+    keyStateRef.current = {
+      pageItems: filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+      favMap,
+      activeMode,
+      focusedIdx,
+    };
+  });
+
   // Keyboard shortcuts
   useEffect(() => {
     function onKey(e) {
+      const { pageItems, favMap: favs, activeMode: mode, focusedIdx: focused } = keyStateRef.current;
+      // Ahead of the typing guard below: ⌘K reaches the chat from anywhere,
+      // including with the cursor still in the search box. Checked before the
+      // bare-k feed navigation so the two don't collide.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setActiveMode(m => (m === 'chat' ? null : 'chat'));
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        if (mode) {
+          e.preventDefault();
+          setActiveMode(null);
+        } else {
+          document.activeElement?.blur();
+        }
+        return;
+      }
+
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
 
@@ -167,21 +211,19 @@ export default function App() {
         return;
       }
 
-      const pageItems = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-
       if (e.key === 'j' || e.key === 'ArrowDown') {
         e.preventDefault();
         setFocusedIdx(i => Math.min(i + 1, pageItems.length - 1));
       } else if (e.key === 'k' || e.key === 'ArrowUp') {
         e.preventDefault();
         setFocusedIdx(i => Math.max(i - 1, 0));
-      } else if (e.key === 'r' && focusedIdx >= 0) {
-        const bm = pageItems[focusedIdx];
+      } else if (e.key === 'r' && focused >= 0) {
+        const bm = pageItems[focused];
         if (bm) handleToggleRead(bm.id);
-      } else if (e.key === 'f' && focusedIdx >= 0) {
-        const bm = pageItems[focusedIdx];
+      } else if (e.key === 'f' && focused >= 0) {
+        const bm = pageItems[focused];
         if (bm) {
-          const cur = favMap[bm.id] || [];
+          const cur = favs[bm.id] || [];
           const next = cur.includes('Favourites') ? cur.filter(f => f !== 'Favourites') : [...cur, 'Favourites'];
           handleSetFavFolders(bm.id, next);
         }
@@ -189,7 +231,7 @@ export default function App() {
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [focusedIdx, currentPage]); // eslint-disable-line
+  }, []); // eslint-disable-line -- live state comes from keyStateRef, not the closure
 
   // Computed: filtered + sorted
   const filtered = useMemo(() => {
@@ -239,7 +281,25 @@ export default function App() {
   }, [allBookmarks, currentFilter, currentSort, searchQuery, readIds, favMap, notesMap, currentVoice, showUnreadOnly, selectedCategories]);
 
   const unreadCount = useMemo(() => allBookmarks.filter(b => !readIds.has(b.id)).length, [allBookmarks, readIds]);
-  const favFolders  = useMemo(() => [...new Set(Object.values(favMap).flat())].sort(), [favMap]);
+  /**
+   * Every folder that exists, most recently used first.
+   *
+   * Deriving this from favMap alone hid folders whose members all sit outside
+   * the loaded collection: they dropped out of the picker entirely, so there
+   * was no way to file anything into them again. state.db is authoritative;
+   * favMap only tops it up with folders created since the last fetch.
+   */
+  const favFolders = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const { folder } of knownFolders) {
+      if (folder && !seen.has(folder)) { seen.add(folder); out.push(folder); }
+    }
+    for (const folder of Object.values(favMap).flat()) {
+      if (folder && !seen.has(folder)) { seen.add(folder); out.push(folder); }
+    }
+    return out;
+  }, [knownFolders, favMap]);
 
   const catCounts = useMemo(() => {
     const counts = {};
@@ -285,6 +345,15 @@ export default function App() {
       clean.length ? (next[id] = clean) : delete next[id];
       return next;
     });
+    // Move what was just used to the front, so the picker's "recent" list
+    // reflects this click rather than the last fetch.
+    if (clean.length) {
+      setKnownFolders(prev => {
+        const touched = new Set(clean);
+        const bumped = clean.map(f => prev.find(k => k.folder === f) || { folder: f, count: 0, lastUsed: null });
+        return [...bumped, ...prev.filter(k => !touched.has(k.folder))];
+      });
+    }
     try {
       await fetch(`/api/fav/${id}`, {
         method: 'POST',
@@ -304,6 +373,17 @@ export default function App() {
         next[id] = [...new Set(arr.map(x => x === f ? t : x))];
       }
       return next;
+    });
+    setKnownFolders(prev => {
+      const merged = [];
+      for (const k of prev) {
+        const folder = k.folder === f ? t : k.folder;
+        const hit = merged.find(m => m.folder === folder);
+        // Renaming onto an existing name merges the two, as the server does.
+        if (hit) hit.count += k.count || 0;
+        else merged.push({ ...k, folder });
+      }
+      return merged;
     });
     setCurrentFilter(prev => prev === `fav:${f}` ? `fav:${t}` : prev);
     try {

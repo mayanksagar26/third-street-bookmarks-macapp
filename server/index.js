@@ -268,6 +268,26 @@ function favGetFolders(id) {
   catch { return []; }
 }
 
+/**
+ * Every folder that exists, newest use first.
+ *
+ * The client cannot derive this from the bookmarks it has loaded: a folder
+ * whose members all sit outside the current collection would simply vanish,
+ * taking its name out of the picker and leaving no way to file anything into
+ * it again. state.db is the only place that knows the full set.
+ */
+function favAllFolders() {
+  const conn = openStateDb();
+  if (!conn) return [];
+  try {
+    return conn.prepare(`
+      SELECT folder, COUNT(*) AS count, MAX(created_at) AS lastUsed
+      FROM fav_membership
+      GROUP BY folder
+      ORDER BY lastUsed DESC, folder ASC`).all();
+  } catch { return []; }
+}
+
 // Replace a bookmark's folder set with `folders` (the desired full list).
 function favSetFolders(id, folders) {
   const conn = openStateDb();
@@ -565,6 +585,11 @@ app.post('/api/read/bulk', (req, res) => {
 });
 
 // Rename a folder across every bookmark (defined before /:id so it isn't shadowed).
+app.get('/api/fav-folders', (req, res) => {
+  try { res.json(favAllFolders()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/api/fav-rename', (req, res) => {
   try {
     const { from, to } = req.body || {};

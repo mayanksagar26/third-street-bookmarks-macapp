@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 
 const SUGGESTIONS = [
   "Show me everything I saved about AI agents",
@@ -18,51 +18,157 @@ function formatDate(s) {
 }
 
 /** How many bookmarks get sent as context and offered back as cards. */
-const MAX_CONTEXT = 24;
+const MAX_CONTEXT = 40;
 
-const STOP_WORDS = new Set([
-  'find','show','what','which','have','been','from','about','that','with','this',
-  'last','give','tell','some','tweets','tweet','bookmark','bookmarks','anything',
-  'related','regarding','were','they','them','their','more','most','please','list',
-]);
+/**
+ * Words that describe the question or the collection rather than a subject.
+ *
+ * Rarity weighting (below) already buries genuinely common words like "the",
+ * so this list only needs to catch meta-vocabulary that is rare enough to look
+ * topical — "poster", "talking", "saved" and friends. Without it, asking for
+ * "posts where the poster is talking about fonts" ranks by the scaffolding
+ * instead of by "fonts".
+ */
+const STOP_WORDS_RAW = [
+  'a','an','the','and','or','but','if','so','as','of','to','in','on','at','by','for','with',
+  'is','are','was','were','be','been','being','am','do','does','did','doing','done','have',
+  'has','had','having','i','me','my','mine','myself','we','us','our','you','your','yours',
+  'he','him','his','she','her','it','its','they','them','their','theirs','this','that',
+  'these','those','there','here','what','whats','which','who','whom','whose','where','when',
+  'why','how','all','any','both','each','few','more','most','other','some','such','no','nor',
+  'not','only','own','same','than','then','too','very','can','could','will','would','shall',
+  'should','may','might','must','just','now','also','out','off','over','under','up','down',
+  'into','onto','from','about','again','further','once','one','two','first','last','next',
+  'like','get','got','give','want','need','know','look','looking','see','seen','make','made',
+  'use','used','using','say','said','says','tell','telling','list','listing','find','finding',
+  'show','showing','search','searching','please',
+  // Vocabulary about the collection itself, not about what a bookmark is on.
+  'bookmark','bookmarked','bookmarking','tweet','tweeted','post','posted','posting','poster',
+  'thread','save','saved','saving','collection','link','author','account','person','people',
+  'someone','anyone','everyone','everything','anything','something','nothing','thing',
+  'talk','talked','talking','mention','mentioned','mentioning','discuss','discussed',
+  'discussing','write','wrote','written','related','regarding','concerning','around','stuff',
+  'content','item','entry','entries','summarise','summarize','summary',
+];
+
+/** Light suffix stripping, so a question about "fonts" reaches a tweet about a "font". */
+function stem(w) {
+  if (w.length > 4 && w.endsWith('ies')) return `${w.slice(0, -3)}y`;
+  if (w.length > 4 && w.endsWith('sses')) return w.slice(0, -2);
+  if (w.length > 4 && w.endsWith('es') && !w.endsWith('ees')) return w.slice(0, -2);
+  if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') && !w.endsWith('us')) return w.slice(0, -1);
+  if (w.length > 5 && w.endsWith('ing')) return w.slice(0, -3);
+  if (w.length > 4 && w.endsWith('ed') && !w.endsWith('eed')) return w.slice(0, -2);
+  return w;
+}
+
+// Stemmed as well, so a stop word still stops once the query token is reduced.
+const STOP_WORDS = new Set([...STOP_WORDS_RAW, ...STOP_WORDS_RAW.map(stem)]);
+
+/** Whole words only — substring matching let "the" hit inside "there" and "other". */
+function tokenize(s) {
+  return ((s || '').toLowerCase().match(/[a-z0-9_]+/g) || []).map(stem);
+}
+
+/**
+ * A searchable view of the whole collection, built once per bookmark set.
+ *
+ * `df` is how many bookmarks each term appears in, which is what lets scoring
+ * tell a topic word from filler without hard-coding either.
+ */
+export function buildIndex(bookmarks) {
+  const docs = bookmarks.map(b => {
+    const text = new Set(tokenize(`${b.text || ''} ${b.note || ''} ${b.articleTitle || ''}`));
+    const author = new Set(tokenize(`${b.authorName || ''} ${b.authorHandle || ''}`));
+    const cat = new Set(tokenize(`${b.primaryCategory || ''} ${(b.categories || []).join(' ')}`));
+    return { b, text, author, cat, all: new Set([...text, ...author, ...cat]) };
+  });
+  const df = new Map();
+  for (const d of docs) for (const t of d.all) df.set(t, (df.get(t) || 0) + 1);
+  return { docs, df, N: docs.length || 1 };
+}
+
+/** Anything scoring far below the best match is noise, however many terms it clipped. */
+const SCORE_FLOOR_RATIO = 0.2;
 
 /**
  * The bookmarks a question is actually about.
  *
- * Returns them rather than a formatted blob, because the same set is used
- * twice: flattened into the prompt, and rendered back as cards under the
- * answer. `matched` distinguishes a real hit from the "here's a sample of your
- * collection" fallback — showing that fallback as sources would be a lie.
+ * Terms are weighted by inverse document frequency, so a word held by five
+ * bookmarks outranks one held by two thousand. Every term counting the same is
+ * what used to sink real hits: "fonts" scored no higher than "the", and the
+ * handful of matching tweets landed below rank 79 — well outside the window
+ * that reaches the model.
+ *
+ * Returns the bookmarks rather than a formatted blob, because the same set is
+ * used twice: flattened into the prompt, and rendered back as cards under the
+ * answer. `matched` distinguishes a real hit from a question about the
+ * collection as a whole — showing those as sources would be a lie.
  */
-function selectRelevant(bookmarks, query) {
-  const q = query.toLowerCase().replace(/[?!.,"']/g, ' ');
-  const terms = [...new Set(q.split(/\s+/).filter(w => w.length > 2 && !STOP_WORDS.has(w)))];
-  if (!terms.length) return { items: bookmarks.slice(0, 10), matched: false };
+export function selectRelevant(index, query) {
+  const { docs, df, N } = index;
+  const candidates = [...new Set(tokenize(query))]
+    .filter(w => w.length > 1 && !STOP_WORDS.has(w))
+    .map(t => ({ t, n: df.get(t) || 0 }));
 
-  const scored = bookmarks.map(b => {
-    const haystack = `${b.text || ''} ${b.authorName || ''} ${b.authorHandle || ''} ${b.primaryCategory || ''} ${(b.categories || []).join(' ')} ${b.note || ''}`.toLowerCase();
+  // Words no bookmark contains. Reported rather than dropped in silence: asking
+  // about knitting should be told the collection has none, not handed whatever
+  // the query's remaining words happened to hit.
+  const missing = candidates.filter(x => x.n === 0).map(x => x.t);
+  const terms = candidates
+    .filter(x => x.n > 0)
+    .map(x => ({ ...x, idf: Math.log(N / x.n) }));
+
+  // No subject left: an aggregate question ("which authors do I bookmark most?"),
+  // which the collection summary in the prompt answers rather than a search.
+  if (!terms.length) return { items: [], matched: false, terms: [], missing, total: 0 };
+
+  const scored = [];
+  for (const d of docs) {
     let score = 0;
-    for (const t of terms) {
-      if (!haystack.includes(t)) continue;
-      score += 1;
-      // An author named in the question is a stronger signal than the word
+    for (const { t, idf } of terms) {
+      // A handle named in the question is a stronger signal than the same word
       // turning up somewhere in a tweet's body.
-      if ((b.authorHandle || '').toLowerCase().includes(t)) score += 2;
-      if ((b.primaryCategory || '').toLowerCase().includes(t)) score += 1;
+      const boost = d.author.has(t) ? 2.5 : d.cat.has(t) ? 1.5 : d.text.has(t) ? 1 : 0;
+      if (boost) score += idf * boost;
     }
-    return { b, score };
-  });
+    if (score > 0) scored.push({ b: d.b, score });
+  }
+  if (!scored.length) return { items: [], matched: false, terms, missing, total: 0 };
 
-  const hits = scored.filter(x => x.score > 0).sort((a, b) => b.score - a.score);
-  if (!hits.length) return { items: bookmarks.slice(0, 10), matched: false };
-  return { items: hits.slice(0, MAX_CONTEXT).map(x => x.b), matched: true };
+  scored.sort((a, b) => b.score - a.score);
+  const floor = scored[0].score * SCORE_FLOOR_RATIO;
+  const kept = scored.filter(x => x.score >= floor);
+  return {
+    items: kept.slice(0, MAX_CONTEXT).map(x => x.b),
+    matched: true,
+    terms,
+    missing,
+    total: kept.length,
+  };
 }
 
-function buildPrompt(bookmarks, query, systemPrompt, relevant) {
+/** Counts by key, highest first — the shape aggregate questions actually need. */
+function topCounts(bookmarks, pick, limit) {
+  const counts = new Map();
+  for (const b of bookmarks) {
+    const k = pick(b);
+    if (k) counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit);
+}
+
+export function buildPrompt(bookmarks, query, systemPrompt, relevant) {
   const totalCount = bookmarks.length;
   const unread = bookmarks.filter(b => !b.isRead).length;
   const authors = new Set(bookmarks.map(b => b.authorHandle)).size;
-  const cats = [...new Set(bookmarks.map(b => b.primaryCategory).filter(Boolean))].join(', ');
+
+  // Counts, not just names: "which authors do I bookmark most?" is a question
+  // about the whole collection, and no excerpt of it can answer that.
+  const topAuthors = topCounts(bookmarks, b => b.authorHandle, 20)
+    .map(([h, n]) => `@${h} (${n})`).join(', ');
+  const topCats = topCounts(bookmarks, b => b.primaryCategory, 25)
+    .map(([c, n]) => `${c} (${n})`).join(', ');
 
   // Numbered, so the answer can point back at specific entries and the UI can
   // show exactly the ones it used.
@@ -70,20 +176,40 @@ function buildPrompt(bookmarks, query, systemPrompt, relevant) {
     `[${i + 1}] @${b.authorHandle}: ${b.text?.slice(0, 220) || ''} (${b.primaryCategory || 'uncategorised'}, ${formatDate(b.bookmarkedAt || b.syncedAt)})`
   ).join('\n');
 
+  // Say plainly what the search did, so the model neither invents a shortfall
+  // nor reports the excerpt it was handed as the whole collection.
+  const missing = relevant.missing?.length
+    ? ` No bookmark anywhere in the collection contains: ${relevant.missing.join(', ')} — say so rather than offering near-misses in their place.`
+    : '';
+
+  let searchNote;
+  if (!relevant.terms.length) {
+    searchNote = `No keyword search was run — this reads as a question about the collection as a whole, so answer it from the summary above rather than from individual bookmarks.${missing}`;
+  } else {
+    const words = relevant.terms.map(x => x.t).join(', ');
+    const outcome = relevant.total
+      ? `${relevant.total} matched; the ${relevant.items.length} strongest are listed below, best first.`
+      : `Nothing matched. Say so plainly instead of substituting loosely related bookmarks.`;
+    searchNote = `Searched all ${totalCount} bookmarks for: ${words}. ${outcome}${missing}`;
+  }
+
   return `${systemPrompt ? systemPrompt + '\n\n' : ''}You are an assistant that helps users explore their X/Twitter bookmark collection.
 
 Collection stats:
 - Total bookmarks: ${totalCount}
 - Unread: ${unread}
 - Unique voices: ${authors}
-- Categories: ${cats}
+- Most bookmarked authors: ${topAuthors || 'none'}
+- Categories by size: ${topCats || 'none'}
 
-Candidate bookmarks for this query:
-${context}
+${searchNote}
+${context ? `\nCandidate bookmarks for this query:\n${context}` : ''}
 
 User question: ${query}
 
 Answer concisely and helpfully. Reference bookmarks by their number, like [3].
+Only cite a candidate if it genuinely addresses the question — a bookmark that
+merely shares a word with it is not a match.
 Use plain text, no markdown headers.
 On the very last line, list every candidate number that is genuinely relevant to
 the question, in the form: SOURCES: 1, 4, 9
@@ -190,6 +316,10 @@ function loadSystemPrompt() {
 }
 
 export default function ChatWithBookmarks({ bookmarks, aiBackend: initialBackend, onClose }) {
+  // Built once per collection, not per question: indexing a few thousand
+  // bookmarks costs tens of milliseconds, searching one costs under three.
+  const index = useMemo(() => buildIndex(bookmarks), [bookmarks]);
+
   const [aiBackend, setAiBackendLocal]  = useState(initialBackend || 'claude');
   const [showSysPrompt, setShowSysPrompt] = useState(false);
   const [systemPrompt, setSystemPrompt]   = useState(loadSystemPrompt);
@@ -216,7 +346,7 @@ export default function ChatWithBookmarks({ bookmarks, aiBackend: initialBackend
   const abortRef = useRef(null);
   // What the in-flight question matched, so a stopped answer still keeps its
   // bookmarks.
-  const relevantRef = useRef({ items: [], matched: false });
+  const relevantRef = useRef({ items: [], matched: false, terms: [], missing: [], total: 0 });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -230,7 +360,7 @@ export default function ChatWithBookmarks({ bookmarks, aiBackend: initialBackend
     setLoading(true);
     setStreaming('');
 
-    const relevant = selectRelevant(bookmarks, query);
+    const relevant = selectRelevant(index, query);
     relevantRef.current = relevant;
     const prompt = buildPrompt(bookmarks, query, systemPrompt, relevant);
 

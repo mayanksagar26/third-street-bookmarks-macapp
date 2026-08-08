@@ -589,7 +589,15 @@ export default function App() {
       />
       <main className="main">
         {activeMode === 'chat' ? (
-          <ChatWithBookmarks bookmarks={allBookmarks} aiBackend={aiBackend} onClose={() => setActiveMode(null)} />
+          <ChatWithBookmarks
+            bookmarks={allBookmarks}
+            aiBackend={aiBackend}
+            favMap={favMap}
+            favFolders={favFolders}
+            onSetFavFolders={handleSetFavFolders}
+            onRenameFavFolder={handleRenameFavFolder}
+            onClose={() => setActiveMode(null)}
+          />
         ) : activeMode === 'stats' ? (
           <StatsObservations bookmarks={allBookmarks} onClose={() => setActiveMode(null)} />
         ) : activeMode === 'podcast' ? (

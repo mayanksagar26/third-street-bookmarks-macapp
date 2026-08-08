@@ -488,6 +488,9 @@ body::before {
   color: var(--text-secondary); padding: 4px 8px 10px;
 }
 .star-wrap { position: relative; display: inline-flex; }
+/* Portalled to <body> and placed from the trigger's rect, so the chat's
+   scrolling result list cannot clip it. */
+.fav-popup-fixed { position: fixed; top: 0; left: 0; right: auto; }
 .fav-popup-folder {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 8px; border-radius: 8px;
@@ -972,6 +975,15 @@ body::before {
   color: var(--accent); text-decoration: none; font-weight: 600;
 }
 .chat-tweet-view:hover { text-decoration: underline; }
+.chat-tweet-fav { display: inline-flex; margin-left: auto; }
+.chat-tweet-star {
+  background: none; border: none; padding: 2px; cursor: pointer;
+  color: var(--text-secondary); display: inline-flex; border-radius: 6px;
+  transition: color 0.12s, background 0.12s;
+}
+.chat-tweet-star svg { width: 15px; height: 15px; }
+.chat-tweet-star:hover { color: #f59e0b; background: rgba(245,158,11,0.12); }
+.chat-tweet-star.active { color: #f59e0b; }
 
 .chat-authors-list { display: flex; flex-direction: column; gap: 2px; }
 .chat-author-row {

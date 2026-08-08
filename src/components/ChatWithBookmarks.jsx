@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import FavFolderPicker from './FavFolderPicker';
 
 const SUGGESTIONS = [
   "Show me everything I saved about AI agents",
@@ -249,7 +250,7 @@ function tweetUrl(b) {
 const TRUNCATE_AT = 280;
 
 /** A bookmark rendered the way it looks in the feed, sized for a chat answer. */
-function ChatTweet({ b }) {
+function ChatTweet({ b, folders, allFolders, onSetFolders, onRenameFolder }) {
   const [expanded, setExpanded] = useState(false);
   const text = b.text || '';
   const long = text.length > TRUNCATE_AT;
@@ -286,6 +287,17 @@ function ChatTweet({ b }) {
           {url && (
             <a className="chat-tweet-view" href={url} target="_blank" rel="noopener noreferrer">View</a>
           )}
+          {onSetFolders && (
+            <span className="chat-tweet-fav">
+              <FavFolderPicker
+                folders={folders}
+                allFolders={allFolders}
+                onSetFolders={onSetFolders}
+                onRenameFolder={onRenameFolder}
+                buttonClassName="chat-tweet-star"
+              />
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -293,7 +305,7 @@ function ChatTweet({ b }) {
 }
 
 /** The scrollable stack of bookmarks an answer drew on. */
-function ChatResults({ items }) {
+function ChatResults({ items, favMap, favFolders, onSetFavFolders, onRenameFavFolder }) {
   if (!items?.length) return null;
   return (
     <div className="chat-results">
@@ -303,7 +315,16 @@ function ChatResults({ items }) {
         {items.length > 3 && <span className="chat-results-hint">scroll for more</span>}
       </div>
       <div className="chat-results-scroll">
-        {items.map(b => <ChatTweet key={b.id} b={b} />)}
+        {items.map(b => (
+          <ChatTweet
+            key={b.id}
+            b={b}
+            folders={favMap?.[b.id] || []}
+            allFolders={favFolders}
+            onSetFolders={onSetFavFolders ? next => onSetFavFolders(b.id, next) : undefined}
+            onRenameFolder={onRenameFavFolder}
+          />
+        ))}
       </div>
     </div>
   );
@@ -315,7 +336,10 @@ function loadSystemPrompt() {
   try { return localStorage.getItem('chatSystemPrompt') || DEFAULT_SYSTEM; } catch { return DEFAULT_SYSTEM; }
 }
 
-export default function ChatWithBookmarks({ bookmarks, aiBackend: initialBackend, onClose }) {
+export default function ChatWithBookmarks({
+  bookmarks, aiBackend: initialBackend, onClose,
+  favMap, favFolders, onSetFavFolders, onRenameFavFolder,
+}) {
   // Built once per collection, not per question: indexing a few thousand
   // bookmarks costs tens of milliseconds, searching one costs under three.
   const index = useMemo(() => buildIndex(bookmarks), [bookmarks]);
@@ -527,7 +551,13 @@ export default function ChatWithBookmarks({ bookmarks, aiBackend: initialBackend
                     </div>
                     <div className="chat-assistant-body">
                       <p className="chat-assistant-text" style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</p>
-                      <ChatResults items={msg.sources} />
+                      <ChatResults
+                        items={msg.sources}
+                        favMap={favMap}
+                        favFolders={favFolders}
+                        onSetFavFolders={onSetFavFolders}
+                        onRenameFavFolder={onRenameFavFolder}
+                      />
                     </div>
                   </div>
                 )}

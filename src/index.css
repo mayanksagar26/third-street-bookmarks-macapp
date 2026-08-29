@@ -278,6 +278,16 @@ body::before {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Progress is one short line and truncates harmlessly. A failure is a sentence
+   naming the cause and a sentence naming the fix — ellipsised to one line, it
+   says nothing at all — so errors wrap and keep their full text. */
+.action-status.error {
+  white-space: normal;
+  overflow: visible;
+  color: var(--like);
+  line-height: 1.45;
+}
 @keyframes rotate { to { transform: rotate(360deg); } }
 .spin { animation: rotate 1s linear infinite; }
 
@@ -395,6 +405,67 @@ body::before {
   position: relative;
 }
 .tweet-card:hover { background: var(--bg-hover); }
+
+/* ── Leaving the feed ──────────────────────────────────────────────────────
+   A card that drops out of the view you are in — marked read under Unread
+   Only, unstarred inside a favourites folder, pulled out of the category you
+   filtered by — dissolves in its own slot before the feed closes over it.
+   Slow enough to see which one went, so an accidental click is obvious.
+
+   The work is split across two elements on purpose. The slot animates height
+   and nothing else; the card animates opacity and transform and nothing else.
+   Height is a layout property, and .feed carries a backdrop-filter, so every
+   frame of a collapse re-resolves layout and re-composites the glass behind
+   it. Opacity and transform never leave the compositor. Run together on one
+   element — as they were — the cheap half is pinned to the frame rate of the
+   expensive half, and the whole thing judders.
+
+   --vanish-h is the slot's measured height, set by Feed just before the
+   animation starts; cards are all different sizes and the collapse needs a
+   real number to shrink from. */
+.tweet-slot.is-vanishing {
+  overflow: hidden;
+  pointer-events: none;
+  /* Starts after the fade is underway, so the gap never sits open and empty —
+     the pause between "gone" and "closed" was most of what read as a stutter. */
+  animation: slot-collapse 400ms cubic-bezier(0.4, 0, 0.2, 1) 130ms forwards;
+  will-change: max-height;
+  contain: layout paint;
+}
+@keyframes slot-collapse {
+  from { max-height: var(--vanish-h, 420px); }
+  to   { max-height: 0; }
+}
+
+/* No blur here. It was the single most expensive property in the old keyframes
+   — a full-card repaint every frame, stacked on top of the feed's own
+   backdrop-filter — and against frosted glass it read as smear rather than
+   dissolve. Fade and drift carry the same meaning for free. */
+.tweet-slot.is-vanishing .tweet-card {
+  animation: card-dissolve 250ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  will-change: opacity, transform;
+}
+@keyframes card-dissolve {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateX(14px) scale(0.985); }
+}
+
+/* Padding and border-width used to be animated alongside the height. Under the
+   global border-box they were always redundant — max-height:0 already collapses
+   a card's padding — so they only ever added layout cost per frame. */
+
+@media (prefers-reduced-motion: reduce) {
+  .tweet-slot.is-vanishing {
+    animation: slot-collapse 220ms ease 80ms forwards;
+  }
+  .tweet-slot.is-vanishing .tweet-card {
+    animation: card-fade-plain 140ms linear forwards;
+  }
+  @keyframes card-fade-plain {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+  }
+}
 
 .tweet-avatar {
   flex-shrink: 0; width: 40px; height: 40px;
@@ -525,6 +596,9 @@ body::before {
 .fav-popup-search::placeholder { color: var(--text-tertiary); }
 .fav-popup-list {
   max-height: 260px; overflow-y: auto;
+  /* Reaching the end of the list must not hand the wheel to the feed behind,
+     which would slide the popup away from under the pointer. */
+  overscroll-behavior: contain;
   scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
 .fav-popup-empty { padding: 8px; font-size: 13px; color: var(--text-secondary); }
@@ -666,26 +740,55 @@ body::before {
   border-radius: 18px; padding: 16px; margin-bottom: 16px;
 }
 /* .panel-card-title extended below with flex layout */
+/* Rows sit in their own rounded slot rather than being separated by rules, so
+   that selecting one can light up a pill instead of painting a full-bleed
+   rectangle across the card. The hairline between rows is drawn as a pseudo
+   element and pulled out around the selected row, which owns its own edges. */
 .top-author {
+  position: relative;
   display: flex; align-items: center; gap: 10px;
-  padding: 8px 0; border-bottom: 1px solid var(--border);
-  cursor: pointer; transition: opacity 0.1s;
+  padding: 8px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
 }
-.top-author:last-child { border-bottom: none; }
-.top-author:hover { opacity: 0.8; }
-.top-author.active { background: rgba(55,180,255,0.08); }
+.top-author + .top-author::before {
+  content: ''; position: absolute; left: 10px; right: 10px; top: 0;
+  border-top: 1px solid var(--border);
+  transition: opacity 0.18s ease;
+}
+.top-author:hover { background: var(--bg-hover); }
+.top-author.active {
+  background: linear-gradient(90deg, rgba(55,180,255,0.18), rgba(55,180,255,0.05));
+  box-shadow: inset 0 0 0 1px rgba(55,180,255,0.38);
+}
+.top-author.active::before,
+.top-author.active + .top-author::before { opacity: 0; }
+.top-author.active .top-author-avatar {
+  box-shadow: 0 0 0 2px var(--accent), 0 0 0 4px rgba(55,180,255,0.18);
+}
 .top-author.active .top-author-name,
 .top-author.active .top-author-handle { color: var(--accent); }
+/* The count doubles as the way out of the filter once a voice is selected. */
+.top-author.active .top-author-count {
+  background: var(--accent); color: #05121c;
+  border-radius: 20px; padding: 1px 8px; font-size: 12px;
+}
 .top-author-avatar {
   width: 36px; height: 36px; border-radius: 50%;
   background: var(--border); overflow: hidden; flex-shrink: 0;
 }
 .top-author-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.voices-list { max-height: 420px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+/* Pulled out past the card's padding so a selected row's pill can breathe
+   sideways while its text still lines up under the card title. */
+.voices-list {
+  max-height: 420px; overflow-y: auto; overflow-x: hidden; margin: 0 -10px;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
 .top-author-info { flex: 1; min-width: 0; }
 .top-author-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .top-author-handle { font-size: 13px; color: var(--text-secondary); }
-.top-author-count { font-size: 13px; font-weight: 600; color: var(--accent); }
+.top-author-count { font-size: 13px; font-weight: 600; color: var(--accent); flex-shrink: 0; }
 
 /* ── Pagination ── */
 .pagination {
@@ -1418,14 +1521,6 @@ kbd {
   background: var(--bg-elevated); border: 1px solid var(--border);
   border-radius: 3px; padding: 1px 4px; color: var(--text-secondary);
 }
-
-/* ── Forgotten Gems badge ── */
-.gems-badge {
-  font-size: 12px; background: rgba(168,85,247,0.12); color: #a855f7;
-  border: 1px solid rgba(168,85,247,0.3); border-radius: 20px;
-  padding: 1px 7px; min-width: 28px; text-align: center;
-}
-.sidebar-item.active .gems-badge { background: #a855f7; color: #fff; border-color: #a855f7; }
 
 /* ── Color label ── */
 .label-popup {

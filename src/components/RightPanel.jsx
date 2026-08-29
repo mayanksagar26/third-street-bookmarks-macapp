@@ -36,6 +36,18 @@ const TOOLS = [
   },
 ];
 
+// Field Theory reads your X session out of a browser's cookie jar, so the only
+// browser that can sync is one you actually read X in. Surfacing how long ago
+// each last wrote a cookie turns "why is my sync 401-ing" into something you
+// can see: the browser you use says today, the one it was pointed at says weeks.
+function lastActiveHint(iso) {
+  if (!iso) return 'no session found';
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return 'active today';
+  if (days === 1) return 'active yesterday';
+  return `last active ${days} days ago`;
+}
+
 export default function RightPanel({
   bookmarks, currentVoice, onVoiceClick,
   syncState, onSync,
@@ -43,6 +55,7 @@ export default function RightPanel({
   aiBackend, onSetAiBackend,
   classifyBackend, onSetClassifyBackend,
   syncSource, onSetSyncSource, sourceInfo = [],
+  syncBrowser, onSetSyncBrowser, browserInfo = [],
   onOpenSettings,
 }) {
   const source = getSource(syncSource);
@@ -174,6 +187,9 @@ export default function RightPanel({
               key={a.handle}
               className={`top-author ${currentVoice === a.handle ? 'active' : ''}`}
               onClick={() => onVoiceClick(a.handle)}
+              title={currentVoice === a.handle
+                ? `Showing only @${a.handle} — click to clear`
+                : `Show only @${a.handle}`}
             >
               <div className="top-author-avatar">
                 {a.img && <img src={a.img} alt="" loading="lazy" onError={e => e.target.style.display='none'} />}
@@ -219,6 +235,23 @@ export default function RightPanel({
               </button>
             ))}
           </div>
+          {browserInfo.length > 0 && (
+            <>
+            <div className="sync-section-label">Browser session</div>
+            <div className="sync-backend-list" style={{ marginBottom: 10 }}>
+            {browserInfo.map(b => (
+              <button
+                key={b.id}
+                className={`sync-backend-item ${syncBrowser === b.id ? 'active' : ''}`}
+                onClick={() => onSetSyncBrowser(b.id)}
+              >
+                <span>{b.label}</span>
+                <span className="sync-backend-hint">{lastActiveHint(b.lastActive)}</span>
+              </button>
+            ))}
+            </div>
+            </>
+          )}
           <div className="sync-section-label">Classify engine</div>
           <div className="sync-backend-list" style={{ marginBottom: 12 }}>
             {[
@@ -245,7 +278,14 @@ export default function RightPanel({
           </svg>
           Sync via {source.label}
         </button>
-        {syncState.msg && <div className="action-status" style={{ marginTop: 6 }}>{syncState.msg}</div>}
+        {syncState.msg && (
+          <div
+            className={`action-status ${syncState.status === 'error' ? 'error' : ''}`.trim()}
+            style={{ marginTop: 6 }}
+          >
+            {syncState.msg}
+          </div>
+        )}
       </div>
     </aside>
   );

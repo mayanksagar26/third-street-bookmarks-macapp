@@ -75,6 +75,8 @@ export default function App() {
   const [aiBackend, setAiBackend]               = useState('claude');
   const [classifyBackend, setClassifyBackend]   = useState('python');
   const [syncSource, setSyncSource]             = useState(DEFAULT_SOURCE);
+  const [syncBrowser, setSyncBrowser]           = useState('chrome');
+  const [browserInfo, setBrowserInfo]           = useState([]);
   const [sourceInfo, setSourceInfo]             = useState([]); // [{id,label,provides,installed}]
   const [ttsConfig, setTtsConfigState]          = useState(loadTtsConfig);
   const [showVoiceSetup, setShowVoiceSetup]     = useState(false);
@@ -118,6 +120,7 @@ export default function App() {
       if (d.aiBackend) setAiBackend(d.aiBackend);
       if (d.classifyBackend) setClassifyBackend(d.classifyBackend);
       if (d.syncSource) setSyncSource(d.syncSource);
+      if (d.syncBrowser) setSyncBrowser(d.syncBrowser);
     }).catch(() => {});
   }, []);
 
@@ -125,6 +128,9 @@ export default function App() {
   useEffect(() => {
     fetch('/api/sources').then(r => r.json()).then(d => {
       if (d.sources) setSourceInfo(d.sources);
+    }).catch(() => {});
+    fetch('/api/browsers').then(r => r.json()).then(d => {
+      if (d.browsers) setBrowserInfo(d.browsers);
     }).catch(() => {});
   }, []);
 
@@ -148,7 +154,11 @@ export default function App() {
         } else if (d.classify.status === 'running') {
           setSyncState({ status: 'running', msg: d.classify.progress || 'Classifying…' });
         } else if (d.sync.status === 'error' || d.classify.status === 'error') {
-          setSyncState({ status: 'error', msg: 'Something went wrong' });
+          // ft names the cause and the remedy; both beat "Something went wrong",
+          // which sent you looking at this app for a problem that is usually an
+          // expired X session in whichever browser the sync reads.
+          const detail = [d.sync.error, d.sync.fix].filter(Boolean).join(' ');
+          setSyncState({ status: 'error', msg: detail || 'Something went wrong' });
           clearInterval(timer);
         } else {
           setSyncState({ status: 'done', msg: 'Done ✓ — reloading…' });
@@ -245,13 +255,7 @@ export default function App() {
     }
 
     if (currentFilter !== 'all') {
-      if (currentFilter === 'gems') {
-        const cutoff = Date.now() - 30 * 86400000;
-        result = result.filter(b => {
-          const date = parseDate(b.bookmarkedAt || b.syncedAt);
-          return date > 0 && date < cutoff && !readIds.has(b.id);
-        });
-      } else if (currentFilter.startsWith('folder:')) {
+      if (currentFilter.startsWith('folder:')) {
         const folder = currentFilter.slice(7);
         result = result.filter(b => (b.folderNames || []).includes(folder));
       } else if (currentFilter === 'fav:all') {
@@ -263,7 +267,7 @@ export default function App() {
     }
 
     if (currentVoice) result = result.filter(b => b.authorHandle === currentVoice);
-    if (showUnreadOnly && currentFilter !== 'gems') result = result.filter(b => !readIds.has(b.id));
+    if (showUnreadOnly) result = result.filter(b => !readIds.has(b.id));
 
     if (searchQuery) {
       const q = searchQuery;
@@ -279,6 +283,21 @@ export default function App() {
 
     return sortBookmarks(result, currentSort);
   }, [allBookmarks, currentFilter, currentSort, searchQuery, readIds, favMap, notesMap, currentVoice, showUnreadOnly, selectedCategories]);
+
+  /**
+   * Identity of the current view, for the feed's leave animation.
+   *
+   * A card that drops out while this holds still left because of something you
+   * did to it, and is worth animating away. When this changes you asked for a
+   * different set of bookmarks, and the feed should just show them.
+   */
+  const viewKey = useMemo(
+    () => [
+      currentFilter, currentSort, searchQuery, showUnreadOnly ? 'unread' : 'all',
+      currentVoice || '', [...selectedCategories].sort().join('+'),
+    ].join('|'),
+    [currentFilter, currentSort, searchQuery, showUnreadOnly, currentVoice, selectedCategories],
+  );
 
   const unreadCount = useMemo(() => allBookmarks.filter(b => !readIds.has(b.id)).length, [allBookmarks, readIds]);
   /**
@@ -315,14 +334,6 @@ export default function App() {
     allBookmarks.forEach(b => (b.folderNames || []).forEach(f => { counts[f] = (counts[f] || 0) + 1; }));
     return counts;
   }, [allBookmarks]);
-
-  const gemsCount = useMemo(() => {
-    const cutoff = Date.now() - 30 * 86400000;
-    return allBookmarks.filter(b => {
-      const date = parseDate(b.bookmarkedAt || b.syncedAt);
-      return date > 0 && date < cutoff && !readIds.has(b.id);
-    }).length;
-  }, [allBookmarks, readIds]);
 
   // Handlers
   const handleToggleRead = useCallback(async (id) => {
@@ -465,6 +476,15 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
+  const handleSetSyncBrowser = useCallback(async (browser) => {
+    setSyncBrowser(browser);
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ syncBrowser: browser }),
+    }).catch(() => {});
+  }, []);
+
   const handleSetTtsConfig = useCallback((cfg) => {
     setTtsConfigState(cfg);
     saveTtsConfig(cfg);
@@ -572,7 +592,6 @@ export default function App() {
       <Sidebar
         total={allBookmarks.length}
         unreadCount={unreadCount}
-        gemsCount={gemsCount}
         currentFilter={currentFilter}
         onFilterChange={handleFilterChange}
         showUnreadOnly={showUnreadOnly}
@@ -630,6 +649,7 @@ export default function App() {
               favFolders={favFolders}
               notesMap={notesMap}
               focusedIdx={focusedIdx}
+              viewKey={viewKey}
               onToggleRead={handleToggleRead}
               onSetFavFolders={handleSetFavFolders}
               onRenameFavFolder={handleRenameFavFolder}
@@ -657,6 +677,9 @@ export default function App() {
         onSetClassifyBackend={handleSetClassifyBackend}
         syncSource={syncSource}
         onSetSyncSource={handleSetSyncSource}
+        syncBrowser={syncBrowser}
+        onSetSyncBrowser={handleSetSyncBrowser}
+        browserInfo={browserInfo}
         sourceInfo={sourceInfo}
       />
       {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}

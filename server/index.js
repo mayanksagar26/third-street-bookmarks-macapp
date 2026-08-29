@@ -85,6 +85,56 @@ const SOURCES = {
 function resolveBin(source) {
   return (SOURCES[source]?.bins || []).find(p => { try { return fs.existsSync(p); } catch { return false; } }) || null;
 }
+
+// ── Browser registry ──────────────────────────────────────────────────────────
+// Field Theory has no X session of its own: `ft sync` borrows cookies from a
+// locally installed browser. Which browser was hardcoded to Chrome, so anyone
+// who reads X in Brave, Comet, Arc or Firefox got a decrypted-but-stale cookie
+// and a 401 from X, with nothing in the UI to suggest the browser was the
+// problem. Mirrors fieldtheory's dist/browsers.js — ids must match, they are
+// passed straight through as `--browser <id>`.
+const BROWSERS = {
+  chrome:   { id: 'chrome',   label: 'Google Chrome',  dir: 'Library/Application Support/Google/Chrome' },
+  chromium: { id: 'chromium', label: 'Chromium',       dir: 'Library/Application Support/Chromium' },
+  brave:    { id: 'brave',    label: 'Brave',          dir: 'Library/Application Support/BraveSoftware/Brave-Browser' },
+  edge:     { id: 'edge',     label: 'Microsoft Edge', dir: 'Library/Application Support/Microsoft Edge' },
+  comet:    { id: 'comet',    label: 'Comet',          dir: 'Library/Application Support/Comet' },
+  dia:      { id: 'dia',      label: 'Dia',            dir: 'Library/Application Support/Dia/User Data' },
+  helium:   { id: 'helium',   label: 'Helium',         dir: 'Library/Application Support/net.imput.helium' },
+  firefox:  { id: 'firefox',  label: 'Firefox',        dir: 'Library/Application Support/Firefox' },
+};
+
+function browserDir(id) {
+  return BROWSERS[id] ? path.join(os.homedir(), BROWSERS[id].dir) : null;
+}
+
+// Newest cookie-store mtime under a browser's user-data dir, as an ISO string.
+//
+// Only the timestamp is read, never the file: it answers "when did you last
+// browse in this?", which is the one fact that makes a stale session obvious in
+// the picker. Chrome sitting three weeks behind Comet is the whole diagnosis.
+function lastCookieWrite(id) {
+  const root = browserDir(id);
+  if (!root) return null;
+  const names = id === 'firefox' ? ['cookies.sqlite'] : ['Cookies', 'Network/Cookies'];
+  let newest = 0;
+  const consider = (file) => {
+    try { newest = Math.max(newest, fs.statSync(file).mtimeMs); } catch {}
+  };
+  let entries = [];
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { return null; }
+  for (const name of names) consider(path.join(root, name));
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    for (const name of names) consider(path.join(root, entry.name, name));
+  }
+  return newest ? new Date(newest).toISOString() : null;
+}
+
+function browserInstalled(id) {
+  const root = browserDir(id);
+  try { return !!root && fs.existsSync(root); } catch { return false; }
+}
 const EXTRA_PATH = '/usr/local/bin:/opt/homebrew/bin:' + path.join(os.homedir(), '.local/bin') +
   ':' + path.join(os.homedir(), '.npm-global/bin') +
   ':' + path.join(os.homedir(), '.nvm/versions/node/v20.0.0/bin');
@@ -387,6 +437,7 @@ const SETTINGS_DEFAULTS = {
   aiBackend: 'claude',
   classifyBackend: 'python',
   syncSource: 'fieldtheory',
+  syncBrowser: 'chrome',
 };
 
 function readSettings() {
@@ -400,6 +451,10 @@ function readSettings() {
   // removed — birdclaw, in the desktop build — would otherwise leave the UI
   // pointing at a backend that no longer exists.
   if (!SOURCES[settings.syncSource]) settings.syncSource = SETTINGS_DEFAULTS.syncSource;
+
+  // Same for the browser: an id we don't recognise would reach `ft` as an
+  // unknown --browser and fail the sync at spawn time.
+  if (!BROWSERS[settings.syncBrowser]) settings.syncBrowser = SETTINGS_DEFAULTS.syncBrowser;
 
   return settings;
 }
@@ -445,6 +500,24 @@ app.get('/api/sources', (req, res) => {
       id: s.id, label: s.label, provides: s.provides, installed: !!resolveBin(s.id),
     })),
   });
+});
+
+// Which browsers this Mac has, and when each last wrote a cookie. `lastActive`
+// is the hint that matters: the browser you actually read X in is the one that
+// wrote cookies today, and that is the one `ft` must be pointed at.
+app.get('/api/browsers', (req, res) => {
+  const active = readSettings().syncBrowser || 'chrome';
+  const browsers = Object.values(BROWSERS)
+    .map(b => ({ id: b.id, label: b.label, installed: browserInstalled(b.id), lastActive: lastCookieWrite(b.id) }))
+    // A user-data dir with no cookie store — Edge and Brave both leave one
+    // behind unused on this machine — cannot hold an X session, so it is noise
+    // in a picker. The current selection stays regardless, or changing away
+    // from a dead browser would mean picking from a list it isn't in.
+    .filter(b => b.installed && (b.lastActive || b.id === active))
+    // Most recently used first: the browser you read X in sorts to the top,
+    // which is nearly always the one that can actually sync.
+    .sort((x, y) => (y.lastActive || '').localeCompare(x.lastActive || ''));
+  res.json({ active, browsers });
 });
 
 // ── AI runtimes ───────────────────────────────────────────────────────────────
@@ -552,21 +625,8 @@ app.get('/api/bookmarks', (req, res) => {
   }
 });
 
-app.post('/api/read/:id', (req, res) => {
-  try {
-    const { id } = req.params;
-    const data = readBookmarks();
-    const bm = data.find(b => b.id === id || b.tweetId === id);
-    if (!bm) return res.status(404).json({ error: 'Not found' });
-    bm.isRead = !bm.isRead;
-    writeBookmarks(data);
-    stateUpsert(bm.id, { isRead: bm.isRead });
-    res.json({ isRead: bm.isRead });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
+// Registered ahead of '/api/read/:id': Express matches in order, and the
+// parameterised route would otherwise swallow this path as id="bulk".
 app.post('/api/read/bulk', (req, res) => {
   try {
     const { ids, read } = req.body;
@@ -583,6 +643,22 @@ app.post('/api/read/bulk', (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+
+app.post('/api/read/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = readBookmarks();
+    const bm = data.find(b => b.id === id || b.tweetId === id);
+    if (!bm) return res.status(404).json({ error: 'Not found' });
+    bm.isRead = !bm.isRead;
+    writeBookmarks(data);
+    stateUpsert(bm.id, { isRead: bm.isRead });
+    res.json({ isRead: bm.isRead });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 // Rename a folder across every bookmark (defined before /:id so it isn't shadowed).
 app.get('/api/fav-folders', (req, res) => {
@@ -816,9 +892,7 @@ app.post('/api/classify-ai', (req, res) => {
       cmd = 'claude'; args = buildAgentArgs('claude', prompt);
     }
 
-    const proc = spawn(cmd, args, {
-      env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH },
-    });
+    const proc = spawn(cmd, args, { env: agentEnv(EXTRA_PATH) });
 
     let out = '';
     proc.stdout.on('data', d => { out += d.toString(); });
@@ -892,7 +966,14 @@ app.post('/api/syncall', (req, res) => {
 
 function runFieldTheorySync(settings) {
   const FT_BIN = resolveBin('fieldtheory') || FT;
-  runProc('sync', FT_BIN, ['sync', '--browser', 'chrome', '--yes'], () => {
+  const browser = settings.syncBrowser || 'chrome';
+  runProc('sync', FT_BIN, ['sync', '--browser', browser, '--yes'], (code) => {
+    // A failed sync leaves the previous export in place. Classifying it again
+    // burns an agent run per batch to relabel bookmarks that already carry the
+    // same labels, and ends with status `done` — which read, to anyone watching
+    // the panel, as though the sync had worked.
+    if (code !== 0) return;
+
     const classifyBackend = settings.classifyBackend || 'python';
     status.classify = 'running';
 
@@ -933,9 +1014,7 @@ function runFieldTheorySync(settings) {
           const prompt = `Classify tweets into one of: ${CATEGORIES.join(', ')}. Return ONLY a JSON array. No markdown.\n\n${lines}`;
           const args2 = buildAgentArgs(classifyBackend === 'codex' ? 'codex' : 'claude', prompt);
 
-          const proc = spawn(aiCmd, args2, {
-            env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH },
-          });
+          const proc = spawn(aiCmd, args2, { env: agentEnv(EXTRA_PATH) });
           let out = '';
           proc.stdout.on('data', d => { out += d.toString(); });
           proc.on('close', code => {
@@ -963,11 +1042,29 @@ function runFieldTheorySync(settings) {
   });
 }
 
+// `ft` fails with a diagnosis attached — "Your X session may have expired …" —
+// and the UI used to replace all of it with "Something went wrong". Pull the
+// Error/Fix pair back out so the panel can say which thing broke.
+//
+// Reads the whole log rather than the tail shown to the user: the spinner emits
+// a chunk per frame, so the error can be many chunks back by the time it lands.
+function syncFailure() {
+  const clean = logs.sync.join('')
+    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, '')   // ANSI colour + erase-line
+    .replace(/\r/g, '\n');                     // spinner rewrites the line
+  const grab = (label) => {
+    const line = clean.split('\n').map(l => l.trim()).find(l => l.startsWith(label));
+    return line ? line.slice(label.length).trim() : null;
+  };
+  return { error: grab('Error:'), fix: grab('Fix:') };
+}
+
 app.get('/api/status', (req, res) => {
   const classifyLog = logs.classify.join('');
   const m = classifyLog.match(/Categories:\s+\d+\/\d+/g);
+  const failure = status.sync === 'error' ? syncFailure() : { error: null, fix: null };
   res.json({
-    sync:     { status: status.sync,     log: logs.sync.slice(-5).join('') },
+    sync:     { status: status.sync,     log: logs.sync.slice(-5).join(''), ...failure },
     classify: { status: status.classify, log: logs.classify.slice(-3).join(''), progress: m ? m[m.length - 1] : null },
   });
 });

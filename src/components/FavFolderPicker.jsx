@@ -63,7 +63,15 @@ export default function FavFolderPicker({
       VIEWPORT_MARGIN,
       Math.min(r.right - POPUP_WIDTH, window.innerWidth - POPUP_WIDTH - VIEWPORT_MARGIN),
     );
-    setPos({ top: r.bottom + TRIGGER_GAP, left });
+    // Flip above the trigger when the popup would run off the bottom. Height is
+    // only known once it has rendered, so the first open falls back to below and
+    // the layout effect corrects it.
+    const h = popupRef.current?.offsetHeight || 0;
+    let top = r.bottom + TRIGGER_GAP;
+    if (h && top + h > window.innerHeight - VIEWPORT_MARGIN) {
+      top = Math.max(VIEWPORT_MARGIN, r.top - TRIGGER_GAP - h);
+    }
+    setPos({ top, left });
   }
 
   useEffect(() => {
@@ -80,20 +88,32 @@ export default function FavFolderPicker({
       if (popupRef.current?.contains(e.target) || wrapRef.current?.contains(e.target)) return;
       setOpen(false);
     };
-    const reposition = () => setOpen(false);
+    const reposition = () => placeFromTrigger();
+    // A fixed popup does not travel with the page, so it has to be re-placed on
+    // every scroll. Closing instead was wrong twice over: scrolling the folder
+    // list itself reaches this in the capture phase and shut the popup mid-drag,
+    // and a wheel over a short list scrolls the feed behind, which shut it too.
+    const onScroll = (e) => {
+      if (popupRef.current?.contains(e.target)) return;
+      const r = wrapRef.current?.getBoundingClientRect();
+      // Only give up once the star itself has left the viewport, where there is
+      // nothing left to anchor to.
+      if (!r || r.bottom < 0 || r.top > window.innerHeight) { setOpen(false); return; }
+      placeFromTrigger();
+    };
     document.addEventListener('click', close);
     window.addEventListener('resize', reposition);
-    // Any scroll under a fixed popup would leave it stranded beside nothing.
-    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('scroll', onScroll, true);
     return () => {
       clearTimeout(t);
       document.removeEventListener('click', close);
       window.removeEventListener('resize', reposition);
-      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('scroll', onScroll, true);
     };
   }, [open]);
 
-  // Flip above the trigger when the popup would run off the bottom.
+  // Correct the first placement, and any later one where the list grew or shrank
+  // enough to change which side of the trigger fits.
   useLayoutEffect(() => {
     if (!open || !popupRef.current || !wrapRef.current) return;
     const h = popupRef.current.offsetHeight;

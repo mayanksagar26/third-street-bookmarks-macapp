@@ -21,7 +21,7 @@ function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : ''; }
 const FAV_SEARCH_FROM = 5;
 
 export default function Sidebar({
-  total, unreadCount, gemsCount,
+  total, unreadCount,
   currentFilter, onFilterChange,
   showUnreadOnly, onToggleUnread,
   catCounts, selectedCategories, onToggleCategory, onClearCategories,
@@ -109,19 +109,6 @@ export default function Sidebar({
             Unread Only
           </span>
           <span className="sidebar-badge">{unreadCount}</span>
-        </div>
-
-        <div
-          className={`sidebar-item ${currentFilter === 'gems' ? 'active' : ''}`}
-          onClick={() => onFilterChange('gems')}
-        >
-          <span className="sidebar-item-left">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l5 2.18V11c0 3.5-2.33 6.79-5 7.93C9.33 17.79 7 14.5 7 11V7.18L12 5z"/>
-            </svg>
-            Forgotten Gems
-          </span>
-          <span className="sidebar-badge gems-badge">{gemsCount}</span>
         </div>
       </div>
 

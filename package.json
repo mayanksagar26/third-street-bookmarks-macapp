@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "app:dev": "tauri dev",
-    "app:build": "tauri build"
+    "app:build": "tauri build",
+    "test": "node --test server/*.test.js"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

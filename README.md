@@ -1,9 +1,9 @@
 # Third Street Bookmarks — Mac App
 
-A native macOS app that turns your X (Twitter) bookmarks into a searchable,
-categorised, listenable library. Everything stays on your Mac. The AI features
-run on the coding CLIs you already have installed — no API key, no upload, no
-account.
+A native macOS app that gathers everything you bookmark — X, Hacker News,
+YouTube, Instagram, and any loose link — into one searchable, categorised,
+listenable library. Everything stays on your Mac. The AI features run on the
+coding CLIs you already have installed — no API key, no upload, no account.
 
 ![The feed](docs/screenshots/02-feed.png)
 
@@ -113,6 +113,76 @@ All the AI tools live in one menu:
 
 ---
 
+## Sources
+
+One collection, several origins. **All Bookmarks** is everything; the **Sources**
+list in the sidebar filters by where a thing came from. Favourites are yours and
+span every source — the folders you make are never touched by a sync.
+
+| Source | How it gets in | Needs |
+|---|---|---|
+| **X** | `ft sync` on a schedule you trigger | Field Theory |
+| **Hacker News** | Browse the front page or an AI feed, save what you want | nothing |
+| **YouTube** | Paste a video, import a public playlist, or a Takeout export | nothing / API key / export |
+| **Instagram** | Official data export | export |
+| **Saved Links** | Paste any URL | nothing |
+
+### Hacker News is a place you browse, not a thing that syncs
+
+There is nothing on HN's side to mirror, so **Tools → Browse Hacker News** hits
+the API live and stores nothing until you press Save. Three tabs: **AI** (the
+last week, filtered by subject and sorted by points), **Front Page**, and
+**New**.
+
+This is deliberate. Thirty front-page stories arriving in your feed every
+morning would bury the things you actually chose, and the unread count would
+stop meaning anything within a week.
+
+### YouTube, in order of setup
+
+1. **Paste a video** — no credentials. Title, channel and thumbnail come from
+   oEmbed.
+2. **A public playlist** — one API key, pasted once into the YouTube tab. Reads
+   any public playlist, yours or anyone's.
+3. **Google Takeout** — playlists, Liked, and **Watch Later**.
+
+There is no sign-in flow, on purpose. `youtube.readonly` is a sensitive scope:
+an unverified app is capped at 100 hand-added test users, and going past that
+needs a Google verification review. For an app people clone and build
+themselves, that turns setup into a support channel. Takeout reaches the same
+data with no credentials at all.
+
+**Watch Later is not readable by any API.** Google removed access in 2016 and
+never restored it, so the export is the only route to it.
+
+### Instagram, via the official export
+
+There is no API for your own saved posts. The alternatives to an export are
+driving a logged-in browser session or replaying the private web endpoints, and
+both carry the same real cost: Instagram treats automated traffic on a logged-in
+account as suspicious, and the outcome is a **checkpoint on your account**
+rather than a failed request.
+
+So the app does the manual thing. **Tools → Add bookmarks → Instagram** links
+straight to Instagram's download page; ask for *Saved posts* in JSON. When the
+ZIP arrives, point step 2 at the unzipped folder.
+
+Both exports are two-phase: the app reads the file, shows you the collections it
+found with their sizes, and imports only the ones you tick. Choosing three
+collections is the entire point of doing it this way.
+
+The export carries no captions or images. Instagram's thumbnail URLs are signed
+and expire within days, so a preview would be broken by the time you read it.
+
+### Collections, playlists and folders
+
+An Instagram collection and a YouTube playlist are the same kind of thing as X's
+bookmark folders: a container the remote service owns. They all land in the
+**Folders** section of the sidebar, kept strictly separate from **Favourites**,
+which are yours. A sync can re-derive a folder; nothing can touch a favourite.
+
+---
+
 ## How it fits together
 
 ```
@@ -134,7 +204,8 @@ All the AI tools live in one menu:
                     ▼
               ~/.tsb/  (shared with the web build)
               ├── state.db       read · fav · label · note
-              ├── bookmarks.json
+              ├── bookmarks.json X, owned by Field Theory
+              ├── sources/       hn · yt · ig · link, owned by this app
               ├── settings.json
               └── server.log
 ```
@@ -158,6 +229,13 @@ Everything writable lives in `~/.tsb/`, **shared with the browser build**. Open
 either one and it's the same collection with the same read/favourite history.
 The app bundle itself is read-only, which is why `server/index.js` takes its
 paths from `TSB_DATA_DIR` and `TSB_SCRIPT_DIR` rather than `__dirname/..`.
+
+`bookmarks.json` still belongs to Field Theory and keeps its exact shape, so
+`ft export` can overwrite it without knowing this app grew other sources.
+Everything else lives under `sources/`, one file per source. Ids are namespaced
+on read (`hn:38104219`, `yt:dQw4w9WgXcQ`) and stripped again on write — without
+that, Hacker News item 12345 and tweet 12345 are the same key in `state.db`, and
+the story silently inherits the tweet's read state and favourite folders.
 
 Your bookmarks never leave this directory. Nothing is uploaded anywhere.
 
@@ -208,12 +286,25 @@ authenticated service that happens to have a short network path.
 | Origin + Host validation | DNS rebinding, and cross-site reads from a page that resolves a domain to loopback. |
 | Path validation on adopt | Arbitrary file reads. Symlink-resolved, home-scoped, `.json`, regular files only. |
 | Read-only agent invocation | Prompt injection turning into code execution. |
+| Ingest fetches are https-only, capped, timed out | A hostile or broken endpoint streaming until the process dies. |
+| Import paths symlink-resolved and home-scoped | Arbitrary file and directory reads through the export importers. |
 
 The token is generated in Rust and passed to the server in its environment, so
 in the packaged app it never touches disk. Standalone runs persist one at `0600`
 for the Vite dev proxy. `/api/health` is the only unauthenticated route — it
 answers readiness before the token reaches the webview and reveals nothing the
 open port doesn't.
+
+**The ingest layer is the first code here that reaches the network.** Every
+other feature reads a local file or spawns a local process. The Hacker News,
+YouTube and link-metadata fetches are outbound HTTP — to public, unauthenticated
+endpoints, with no account and nothing about you in the request, but they are
+still a new capability and worth naming rather than leaving to be discovered.
+They are https-only, capped at 4 MB, and time out at 15 seconds.
+
+Nothing is uploaded. The one direction that carries your data anywhere is the
+one that does not exist: there is no scraping of a logged-in session, for
+Instagram or anything else.
 
 **Agents run with their hands tied.** Every prompt this app builds contains
 bookmark text, which is content a stranger wrote and you saved — "ignore your
@@ -248,13 +339,26 @@ These are real and worth fixing before this goes to anyone else's machine:
   defence-in-depth gap rather than a live hole — but it should be consistent.
 - **`better-sqlite3` is a native module** compiled for this machine's arch. A
   universal build needs it rebuilt for both, or the server ported to Rust.
-- **No tests.** Upstream has none either; the sidecar logic is the first thing
-  here that deserves them.
+- **Tests cover the ingest layer only.** `npm test` runs 24 cases over id
+  namespacing, the merge rules, and the four parsers — the parts with real logic,
+  and where both bugs found while building this actually lived. The sidecar
+  logic and the routes still have none.
+- **Instagram and Watch Later are manual by nature.** Neither has an API, so both
+  are export-driven and go stale between imports. That is a platform constraint,
+  not something a later version fixes.
+- **Takeout titles are best-effort.** A Takeout CSV is video ids and nothing
+  else, so titles are filled in afterwards from oEmbed, bounded at 150 lookups
+  per import. A larger Watch Later imports fully but leaves later rows untitled
+  until a re-import.
 
 ## Roadmap
 
-**Phase 1 — desktop shell.** ← you are here
+**Phase 1 — desktop shell.** ✅
 Tauri window, supervised Node sidecar, port injection, packaged `.dmg`.
+
+**Phase 1.5 — every bookmark in one place.** ← you are here
+Namespaced ids, per-source storage, a Hacker News browse pane, YouTube and
+Instagram imports, and save-any-URL.
 
 **Phase 2 — the harness.**
 Replace `spawn('claude', ['-p', prompt])` with an

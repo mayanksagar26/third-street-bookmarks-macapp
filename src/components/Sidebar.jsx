@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { getSource } from '../sources';
+import { SOURCE_ORDER, getBookmarkSource, SourceIcon } from '../bookmark-sources';
 
 const CAT_DOT_COLORS = {
   technology:'#1d9bf0', tech:'#1d9bf0', ai:'#a855f7',
@@ -26,6 +27,7 @@ export default function Sidebar({
   showUnreadOnly, onToggleUnread,
   catCounts, selectedCategories, onToggleCategory, onClearCategories,
   favMap, favFolders, folderCounts, onRenameFavFolder,
+  sourceCounts = {},
   syncSource,
 }) {
   const [catSearch, setCatSearch] = useState('');
@@ -111,6 +113,32 @@ export default function Sidebar({
           <span className="sidebar-badge">{unreadCount}</span>
         </div>
       </div>
+
+      {/* Sources — where a bookmark came from, not which backend syncs it.
+          "All Bookmarks" above stays deliberately unbranded: the moment a
+          second source exists, an X logo on it is a claim about its contents
+          that isn't true. */}
+      {SOURCE_ORDER.some(id => sourceCounts[id]) && (
+        <div className="sidebar-section">
+          <div className="sidebar-section-title">Sources</div>
+          {SOURCE_ORDER.filter(id => sourceCounts[id]).map(id => {
+            const src = getBookmarkSource(id);
+            return (
+              <div
+                key={id}
+                className={`sidebar-item ${currentFilter === `source:${id}` ? 'active' : ''}`}
+                onClick={() => onFilterChange(`source:${id}`)}
+              >
+                <span className="sidebar-item-left">
+                  <SourceIcon source={id} size={16} style={{ color: src.accent }} />
+                  {src.label}
+                </span>
+                <span className="sidebar-badge">{sourceCounts[id]}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Favourites */}
       {favTotal > 0 && (

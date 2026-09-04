@@ -201,6 +201,53 @@ function validatePrompt(value, max = 24_000) {
   return value;
 }
 
+
+/**
+ * Validate a path an import is allowed to read.
+ *
+ * Same reasoning as validateBookmarkPath — symlink-resolved, home-scoped, so
+ * the endpoint can't be used to probe for files elsewhere on the machine — but
+ * generalised, because the platform exports arrive in shapes that one didn't
+ * anticipate: a Google Takeout playlist is .csv, and an Instagram export is a
+ * folder you point at rather than a single file.
+ */
+function validateImportPath(input, { extensions = ['.json'], allowDir = false } = {}) {
+  if (typeof input !== 'string' || input.length === 0 || input.length > 4096) {
+    throw new Error('Invalid path');
+  }
+  if (input.includes('\0')) throw new Error('Invalid path');
+
+  let resolved;
+  try {
+    resolved = fs.realpathSync(path.resolve(input));
+  } catch {
+    throw new Error('That file no longer exists');
+  }
+
+  const home = fs.realpathSync(os.homedir());
+  const withinHome = resolved === home || resolved.startsWith(home + path.sep);
+  if (!withinHome) throw new Error('Only files inside your home folder can be used');
+
+  const stat = fs.lstatSync(resolved);
+
+  if (stat.isDirectory()) {
+    if (!allowDir) throw new Error('That is a folder, not a file');
+    // The home directory itself would make the recursive scan below walk
+    // everything the user owns.
+    if (resolved === home) throw new Error('Pick the export folder, not your home folder');
+    return resolved;
+  }
+
+  if (!stat.isFile()) throw new Error('Not a regular file');
+  const ext = path.extname(resolved).toLowerCase();
+  if (!extensions.includes(ext)) {
+    throw new Error(`Only ${extensions.join(' or ')} files can be used`);
+  }
+  if (stat.size > 512 * 1024 * 1024) throw new Error('That file is too large');
+
+  return resolved;
+}
+
 module.exports = {
   ALLOWED_ORIGINS,
   createCors,
@@ -208,5 +255,6 @@ module.exports = {
   resolveToken,
   securityHeaders,
   validateBookmarkPath,
+  validateImportPath,
   validatePrompt,
 };

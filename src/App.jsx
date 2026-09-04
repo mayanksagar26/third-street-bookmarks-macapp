@@ -10,6 +10,8 @@ import StatsObservations from './components/StatsObservations';
 import BookmarkPodcast from './components/BookmarkPodcast';
 import VoiceBubble from './components/VoiceBubble';
 import Settings from './components/Settings';
+import HackerNews from './components/HackerNews';
+import AddBookmark from './components/AddBookmark';
 import { DEFAULT_SOURCE } from './sources';
 
 const PAGE_SIZE = 30;
@@ -86,9 +88,11 @@ export default function App() {
   const voiceScriptRef                          = useRef([]);
   const audioRef                                = useRef(null);
 
-  // Load bookmarks
-  useEffect(() => {
-    fetch('/api/bookmarks')
+  // Load bookmarks. Extracted so anything that adds to the collection — a
+  // Hacker News save, a pasted link, an export import — can pull the merged
+  // list again rather than trying to splice a record in by hand.
+  const loadBookmarks = useCallback(() => {
+    return fetch('/api/bookmarks')
       .then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(d.error || 'Failed to load')))
       .then(data => {
         setAllBookmarks(data);
@@ -105,6 +109,8 @@ export default function App() {
       })
       .catch(e => { setError(String(e)); setLoading(false); });
   }, []);
+
+  useEffect(() => { loadBookmarks(); }, [loadBookmarks]);
 
   // The full folder list, including folders with no member in this collection.
   useEffect(() => {
@@ -263,6 +269,9 @@ export default function App() {
       } else if (currentFilter.startsWith('fav:')) {
         const folder = currentFilter.slice(4);
         result = result.filter(b => favMap[b.id]?.includes(folder));
+      } else if (currentFilter.startsWith('source:')) {
+        const src = currentFilter.slice(7);
+        result = result.filter(b => (b.source || 'x') === src);
       }
     }
 
@@ -276,6 +285,8 @@ export default function App() {
         (b.authorHandle || '').toLowerCase().includes(q.replace('@', '')) ||
         (b.authorName || '').toLowerCase().includes(q) ||
         (b.articleTitle || '').toLowerCase().includes(q) ||
+        (b.title || '').toLowerCase().includes(q) ||
+        (b.domain || '').toLowerCase().includes(q) ||
         (b.primaryCategory || '').toLowerCase().includes(q) ||
         (notesMap[b.id] || '').toLowerCase().includes(q)
       );
@@ -332,6 +343,12 @@ export default function App() {
   const folderCounts = useMemo(() => {
     const counts = {};
     allBookmarks.forEach(b => (b.folderNames || []).forEach(f => { counts[f] = (counts[f] || 0) + 1; }));
+    return counts;
+  }, [allBookmarks]);
+
+  const sourceCounts = useMemo(() => {
+    const counts = {};
+    allBookmarks.forEach(b => { const s = b.source || 'x'; counts[s] = (counts[s] || 0) + 1; });
     return counts;
   }, [allBookmarks]);
 
@@ -603,6 +620,7 @@ export default function App() {
         favMap={favMap}
         favFolders={favFolders}
         folderCounts={folderCounts}
+        sourceCounts={sourceCounts}
         onRenameFavFolder={handleRenameFavFolder}
         syncSource={syncSource}
       />
@@ -619,6 +637,10 @@ export default function App() {
           />
         ) : activeMode === 'stats' ? (
           <StatsObservations bookmarks={allBookmarks} onClose={() => setActiveMode(null)} />
+        ) : activeMode === 'hn' ? (
+          <HackerNews onSaved={loadBookmarks} onClose={() => setActiveMode(null)} />
+        ) : activeMode === 'add' ? (
+          <AddBookmark onAdded={loadBookmarks} onClose={() => setActiveMode(null)} />
         ) : activeMode === 'podcast' ? (
           <BookmarkPodcast bookmarks={allBookmarks} ttsConfig={ttsConfig} onSetTtsConfig={handleSetTtsConfig} aiBackend={aiBackend} onClose={() => setActiveMode(null)} />
         ) : (

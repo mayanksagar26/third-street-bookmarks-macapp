@@ -2412,10 +2412,13 @@ kbd {
 
 /* ── Shared pane chrome ───────────────────────────────────────────────────── */
 
+/* 16px matches the feed's gutter exactly, so the close button lands on the
+   same right edge as "Mark all read" and the card actions rather than 10px
+   inside them. */
 .hn-pane, .add-pane {
   flex: 1;
   overflow-y: auto;
-  padding: 22px 26px 60px;
+  padding: 22px 16px 60px;
 }
 
 .hn-header, .add-header {
@@ -2715,16 +2718,47 @@ kbd {
   opacity: 0.85;
 }
 
-/* The count swaps to the verb on hover: the row is a filter when it has
-   something and a doorway when it doesn't, and it should say which. */
-.sidebar-badge .src-add { display: none; }
-.sidebar-item.source-item.is-actionable:hover .src-count { display: none; }
-.sidebar-item.source-item.is-actionable:hover .src-add {
+/* The count swaps to a verb: "Add" when the source is empty, "Open" when it
+   has something and you want the browse or import surface again. An empty row
+   reveals it on row hover, because the whole row is the doorway; a filled row
+   only on badge hover, because the row itself is a filter. */
+.sidebar-badge.src-action {
+  font: inherit;
+  cursor: pointer;
+  min-width: 34px;
+  text-align: center;
+}
+.source-item .src-add { display: none; }
+
+.source-item.is-empty:hover .src-count,
+.source-item .src-action:hover .src-count { display: none; }
+.source-item.is-empty:hover .src-add,
+.source-item .src-action:hover .src-add {
   display: inline;
   color: var(--accent);
   font-weight: 600;
 }
-.sidebar-item.source-item.is-actionable:hover .sidebar-badge {
+.source-item.is-empty:hover .sidebar-badge,
+.source-item .src-action:hover {
   opacity: 1;
   border-color: var(--accent);
 }
+
+.hn-saved-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 14px;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+.hn-saved-note button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 0;
+}
+.hn-saved-note button:hover { text-decoration: underline; }

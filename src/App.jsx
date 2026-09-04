@@ -589,11 +589,16 @@ export default function App() {
     // 'all' and favourites views show everything (read + unread); favourites are
     // never hidden by read state.
     if (filter === 'all' || filter.startsWith('fav:')) setShowUnreadOnly(false);
+    // Picking anything in the sidebar is a request to look at the feed. Leaving
+    // the Hacker News or add pane covering it meant the click appeared to do
+    // nothing at all.
+    setActiveMode(null);
     setCurrentPage(1);
     setFocusedIdx(-1);
   }, []);
 
   const handleToggleCategory = useCallback((cat) => {
+    setActiveMode(null);
     setSelectedCats(prev => {
       const next = new Set(prev);
       next.has(cat) ? next.delete(cat) : next.add(cat);
@@ -633,7 +638,7 @@ export default function App() {
         currentFilter={currentFilter}
         onFilterChange={handleFilterChange}
         showUnreadOnly={showUnreadOnly}
-        onToggleUnread={() => { setCurrentFilter('all'); setShowUnreadOnly(p => !p); setCurrentPage(1); setFocusedIdx(-1); }}
+        onToggleUnread={() => { setCurrentFilter('all'); setShowUnreadOnly(p => !p); setActiveMode(null); setCurrentPage(1); setFocusedIdx(-1); }}
         catCounts={catCounts}
         selectedCategories={selectedCategories}
         onToggleCategory={handleToggleCategory}

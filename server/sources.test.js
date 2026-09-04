@@ -202,6 +202,65 @@ test('no thumbnail is recorded — the CDN links expire within days', () => {
   assert.ok(records.every(r => r.thumbnailUrl === null));
 });
 
+// ── Read and favourite state across sources ─────────────────────────────────
+//
+// These are the operations a namespaced id has to survive. A colon in the id
+// travels through a URL path (`/api/read/hn:49550772`), a SQLite primary key,
+// and a `find` over the merged list, and a break anywhere in that chain looks
+// to the user like "marking it read did nothing".
+
+test('a namespaced id is a legal single URL path segment', () => {
+  for (const id of ['x:1789012345', 'hn:49550772', 'yt:dQw4w9WgXcQ', 'link:f68066d5', 'ig:ABC_-123']) {
+    const url = new URL(`http://127.0.0.1/api/read/${id}`);
+    assert.equal(decodeURIComponent(url.pathname.split('/').pop()), id, id);
+  }
+});
+
+test('every source produces ids that survive a round trip through the store', () => {
+  const dir = tmpdir();
+  const recs = [
+    { id: 'hn:1', rawId: '1', folderNames: [] },
+    { id: 'yt:dQw4w9WgXcQ', rawId: 'dQw4w9WgXcQ', folderNames: [] },
+    { id: 'ig:ABC_-123', rawId: 'ABC_-123', folderNames: [] },
+    { id: 'link:deadbeef', rawId: 'deadbeef', folderNames: [] },
+  ];
+  for (const r of recs) {
+    const source = store.splitId(r.id).source;
+    store.upsertSource(dir, source, [r]);
+    const back = store.readSource(dir, source).find(x => x.id === r.id);
+    assert.ok(back, `${r.id} did not come back`);
+    assert.equal(store.normalizeManaged(back, source).id, r.id, 'id is stable across normalise');
+  }
+});
+
+test('merging a re-save does not resurrect an item as unread', () => {
+  // Saving the same HN story twice must not clear the read state you set — the
+  // incoming record always carries isRead:false, and `false` is a real value
+  // rather than an absent one.
+  const merged = store.mergeRecord(
+    { id: 'hn:1', isRead: true, folderNames: [] },
+    { id: 'hn:1', isRead: false, folderNames: [] },
+  );
+  assert.equal(merged.isRead, true);
+});
+
+test('an ingest never writes favourites, notes or labels either', () => {
+  const mine = {
+    id: 'yt:a', isRead: true, favFolders: ['To Watch'], favFolder: 'To Watch',
+    note: 'start at 4:20', colorLabel: 'amber', folderNames: [],
+  };
+  const incoming = {
+    id: 'yt:a', isRead: false, favFolders: [], favFolder: null,
+    note: null, colorLabel: null, title: 'A better title', folderNames: [],
+  };
+  const merged = store.mergeRecord(mine, incoming);
+  assert.equal(merged.favFolder, 'To Watch');
+  assert.deepEqual(merged.favFolders, ['To Watch']);
+  assert.equal(merged.note, 'start at 4:20');
+  assert.equal(merged.colorLabel, 'amber');
+  assert.equal(merged.title, 'A better title', 'source-owned fields still update');
+});
+
 // ── Link canonicalisation ────────────────────────────────────────────────────
 
 test('tracking parameters are stripped so one link stays one bookmark', () => {

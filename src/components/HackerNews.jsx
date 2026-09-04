@@ -33,6 +33,10 @@ export default function HackerNews({ onSaved, onClose }) {
   const [error, setError]     = useState(null);
   const [saving, setSaving]   = useState({});
   const [query, setQuery]     = useState('');
+  // Stories already in your collection drop out of the list. Leaving them in —
+  // even dimmed — means every visit re-offers the same twenty things you
+  // already dealt with, and the front page barely moves day to day.
+  const [showSaved, setShowSaved] = useState(false);
 
   const load = useCallback((which) => {
     setLoading(true);
@@ -56,7 +60,11 @@ export default function HackerNews({ onSaved, onClose }) {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'save failed');
       setSaving(s => ({ ...s, [story.id]: 'saved' }));
-      setStories(list => list.map(x => x.id === story.id ? { ...x, alreadySaved: true } : x));
+      // A short beat before it leaves the list: an instant disappearance reads
+      // as the click having gone wrong.
+      setTimeout(() => {
+        setStories(list => list.map(x => x.id === story.id ? { ...x, alreadySaved: true } : x));
+      }, 420);
       onSaved?.(d.record);
     } catch (e) {
       setSaving(s => ({ ...s, [story.id]: 'error' }));
@@ -64,9 +72,13 @@ export default function HackerNews({ onSaved, onClose }) {
   }
 
   const q = query.trim().toLowerCase();
-  const visible = q
+  const matching = q
     ? stories.filter(s => `${s.title} ${s.authorHandle} ${s.domain}`.toLowerCase().includes(q))
     : stories;
+  // `saving[id] === 'saved'` rather than `alreadySaved` for the row you just
+  // clicked, so it leaves on a beat you can see instead of vanishing mid-click.
+  const savedCount = matching.filter(s => s.alreadySaved).length;
+  const visible = showSaved ? matching : matching.filter(s => !s.alreadySaved);
 
   return (
     <div className="hn-pane">
@@ -103,6 +115,15 @@ export default function HackerNews({ onSaved, onClose }) {
         </button>
       </div>
 
+      {savedCount > 0 && (
+        <div className="hn-saved-note">
+          {savedCount} already saved {showSaved ? 'shown' : 'hidden'}
+          <button onClick={() => setShowSaved(v => !v)}>
+            {showSaved ? 'Hide them' : 'Show them'}
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="hn-error">
           {error}
@@ -112,7 +133,11 @@ export default function HackerNews({ onSaved, onClose }) {
 
       {loading && !stories.length && <div className="hn-empty">Fetching stories…</div>}
       {!loading && !error && !visible.length && (
-        <div className="hn-empty">{q ? 'Nothing matches that.' : 'No stories came back.'}</div>
+        <div className="hn-empty">
+          {q ? 'Nothing matches that.'
+            : savedCount ? 'You have saved everything here. Try another tab, or Refresh.'
+            : 'No stories came back.'}
+        </div>
       )}
 
       <div className="hn-list">

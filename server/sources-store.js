@@ -114,6 +114,19 @@ function upsertSource(dataDir, source, incoming) {
 }
 
 /**
+ * Fields that belong to you, not to the source that supplied the record.
+ *
+ * state.db is the authority for these, and `applyState` overwrites them on
+ * every read — but the JSON is what's left when a state row is missing, so an
+ * ingest must not be allowed to write them either. Saving the same Hacker News
+ * story twice hands us `isRead: false`, and `false` is a real value rather than
+ * an absent one, so a field-by-field merge would happily reset a story you had
+ * already read. That is exactly the thing this app promises cannot happen: no
+ * sync from any source can reset your history.
+ */
+const USER_FIELDS = new Set(['isRead', 'favFolders', 'favFolder', 'colorLabel', 'note']);
+
+/**
  * Merge an incoming record over an existing one, field by field.
  *
  * A blanket spread loses data whenever the sources differ in richness: a
@@ -125,10 +138,12 @@ function upsertSource(dataDir, source, incoming) {
  *   bookmarkedAt  the earlier wins — when you first kept a thing is yours
  *   folderNames   union — one video in three playlists is one bookmark in
  *                 three folders, and importing the second must not drop the first
+ *   USER_FIELDS   never written by an ingest at all, see above
  */
 function mergeRecord(prev, next) {
   const out = { ...prev };
   for (const [key, value] of Object.entries(next)) {
+    if (USER_FIELDS.has(key)) continue;
     const empty = value === null || value === undefined || value === ''
       || (Array.isArray(value) && value.length === 0);
     if (empty) continue;
@@ -240,6 +255,6 @@ module.exports = {
   MANAGED, SOURCE_META,
   nsId, splitId, sourceOf,
   sourcesDir, sourceFile, readSource, writeSource, upsertSource, removeFromSource, mergeRecord,
-  normalizeX, normalizeManaged, denormalizeX,
+  normalizeX, normalizeManaged, denormalizeX, USER_FIELDS,
   readAll, writeAll, counts,
 };

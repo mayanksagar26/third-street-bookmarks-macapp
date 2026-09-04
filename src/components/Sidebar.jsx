@@ -152,10 +152,22 @@ export default function Sidebar({
                 <SourceIcon source={id} size={16} style={empty ? undefined : { color: src.accent }} />
                 {src.label}
               </span>
-              <span className="sidebar-badge">
-                <span className="src-count">{count}</span>
-                {actionable && <span className="src-add">Add</span>}
-              </span>
+              {/* Filled or empty, a source with a surface keeps a way back to
+                  it. The row body filters; this opens. Without it, browsing
+                  Hacker News a second time meant going via the Tools menu, and
+                  re-importing a playlist had no entry point at all. */}
+              {src.action ? (
+                <button
+                  className="sidebar-badge src-action"
+                  onClick={e => { e.stopPropagation(); onSourceAction?.(src.action); }}
+                  title={empty ? src.emptyHint : `Open ${src.label}`}
+                >
+                  <span className="src-count">{count}</span>
+                  <span className="src-add">{empty ? 'Add' : 'Open'}</span>
+                </button>
+              ) : (
+                <span className="sidebar-badge">{count}</span>
+              )}
             </div>
           );
         })}

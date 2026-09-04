@@ -2681,3 +2681,50 @@ kbd {
 }
 .add-msg.ok { background: rgba(0, 186, 124, 0.12); color: #4ade9f; }
 .add-msg.error { background: rgba(249, 24, 128, 0.11); color: #ff7b9c; }
+
+/* ── Sources: filled vs. empty ────────────────────────────────────────────────
+   Every source is listed from the first launch. Colour carries the whole
+   signal: a filled source wears its brand colour, an empty one inherits the
+   row's grey and only wakes up on hover. */
+
+.sidebar-item.source-item.is-empty {
+  color: var(--text-tertiary);
+}
+.sidebar-item.source-item.is-empty .sidebar-badge {
+  color: var(--text-tertiary);
+  opacity: 0.6;
+}
+/* The icon is given no inline colour when empty, so it inherits this. */
+.sidebar-item.source-item.is-empty svg {
+  opacity: 0.5;
+}
+
+/* An empty source with nowhere to send you — X, whose only way in is a sync —
+   stays inert rather than pretending to be a button. */
+.sidebar-item.source-item.is-empty:not(.is-actionable) {
+  cursor: default;
+}
+.sidebar-item.source-item.is-empty:not(.is-actionable):hover {
+  background: none;
+}
+
+.sidebar-item.source-item.is-actionable:hover {
+  color: var(--text-secondary);
+}
+.sidebar-item.source-item.is-actionable:hover svg {
+  opacity: 0.85;
+}
+
+/* The count swaps to the verb on hover: the row is a filter when it has
+   something and a doorway when it doesn't, and it should say which. */
+.sidebar-badge .src-add { display: none; }
+.sidebar-item.source-item.is-actionable:hover .src-count { display: none; }
+.sidebar-item.source-item.is-actionable:hover .src-add {
+  display: inline;
+  color: var(--accent);
+  font-weight: 600;
+}
+.sidebar-item.source-item.is-actionable:hover .sidebar-badge {
+  opacity: 1;
+  border-color: var(--accent);
+}

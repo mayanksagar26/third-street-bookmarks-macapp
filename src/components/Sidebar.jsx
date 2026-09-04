@@ -28,6 +28,7 @@ export default function Sidebar({
   catCounts, selectedCategories, onToggleCategory, onClearCategories,
   favMap, favFolders, folderCounts, onRenameFavFolder,
   sourceCounts = {},
+  onSourceAction,
   syncSource,
 }) {
   const [catSearch, setCatSearch] = useState('');
@@ -117,28 +118,48 @@ export default function Sidebar({
       {/* Sources — where a bookmark came from, not which backend syncs it.
           "All Bookmarks" above stays deliberately unbranded: the moment a
           second source exists, an X logo on it is a claim about its contents
-          that isn't true. */}
-      {SOURCE_ORDER.some(id => sourceCounts[id]) && (
-        <div className="sidebar-section">
-          <div className="sidebar-section-title">Sources</div>
-          {SOURCE_ORDER.filter(id => sourceCounts[id]).map(id => {
-            const src = getBookmarkSource(id);
-            return (
-              <div
-                key={id}
-                className={`sidebar-item ${currentFilter === `source:${id}` ? 'active' : ''}`}
-                onClick={() => onFilterChange(`source:${id}`)}
-              >
-                <span className="sidebar-item-left">
-                  <SourceIcon source={id} size={16} style={{ color: src.accent }} />
-                  {src.label}
-                </span>
-                <span className="sidebar-badge">{sourceCounts[id]}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+          that isn't true.
+
+          Every source is listed from the first launch. A source you have not
+          filled is greyed rather than hidden — hiding it means never learning
+          it exists — and clicking it opens the place you fill it, because a
+          filter that resolves to nothing is a dead end. */}
+      <div className="sidebar-section">
+        <div className="sidebar-section-title">Sources</div>
+        {SOURCE_ORDER.map(id => {
+          const src = getBookmarkSource(id);
+          const count = sourceCounts[id] || 0;
+          const empty = count === 0;
+          const actionable = empty && Boolean(src.action);
+          return (
+            <div
+              key={id}
+              className={
+                `sidebar-item source-item` +
+                (empty ? ' is-empty' : '') +
+                (actionable ? ' is-actionable' : '') +
+                (currentFilter === `source:${id}` ? ' active' : '')
+              }
+              onClick={() => {
+                if (!empty) onFilterChange(`source:${id}`);
+                else if (actionable) onSourceAction?.(src.action);
+              }}
+              title={empty ? src.emptyHint : `${count} from ${src.label}`}
+            >
+              <span className="sidebar-item-left">
+                {/* Colour is the signal. An empty source inherits the row's
+                    grey rather than wearing its brand colour. */}
+                <SourceIcon source={id} size={16} style={empty ? undefined : { color: src.accent }} />
+                {src.label}
+              </span>
+              <span className="sidebar-badge">
+                <span className="src-count">{count}</span>
+                {actionable && <span className="src-add">Add</span>}
+              </span>
+            </div>
+          );
+        })}
+      </div>
 
       {/* Favourites */}
       {favTotal > 0 && (

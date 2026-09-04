@@ -13,6 +13,7 @@ import Settings from './components/Settings';
 import HackerNews from './components/HackerNews';
 import AddBookmark from './components/AddBookmark';
 import { DEFAULT_SOURCE } from './sources';
+import { getBookmarkSource } from './bookmark-sources';
 
 const PAGE_SIZE = 30;
 
@@ -66,6 +67,8 @@ export default function App() {
   const [syncState, setSyncState]               = useState({ status: 'idle', msg: '' });
   const [activeMode, setActiveMode]             = useState(null);
   const [settingsOpen, setSettingsOpen]         = useState(false);
+  // Which tab the add pane opens on when a source row sends you there.
+  const [addTab, setAddTab]                     = useState('paste');
 
   // The native menu's Settings item (Cmd+,) reaches React through an event,
   // since the menu lives in Rust and has no other handle on this tree.
@@ -599,6 +602,24 @@ export default function App() {
     setCurrentPage(1);
   }, []);
 
+  /**
+   * Clicking a source that has nothing in it yet.
+   *
+   * Filtering to an empty feed would tell you nothing you didn't already know
+   * from the greyed-out row, so these go to the surface that fills the source
+   * instead. X is the exception: its only route in is a Field Theory sync,
+   * which lives in the right panel, so that row stays inert and says so in its
+   * tooltip.
+   */
+  const handleSourceAction = useCallback((action) => {
+    if (!action) return;
+    if (action === 'hn') { setActiveMode('hn'); return; }
+    if (action.startsWith('add:')) {
+      setAddTab(action.slice(4));
+      setActiveMode('add');
+    }
+  }, []);
+
   const handleVoiceClick = useCallback((handle) => {
     setCurrentVoice(prev => prev === handle ? null : handle);
     setCurrentPage(1);
@@ -621,6 +642,7 @@ export default function App() {
         favFolders={favFolders}
         folderCounts={folderCounts}
         sourceCounts={sourceCounts}
+        onSourceAction={handleSourceAction}
         onRenameFavFolder={handleRenameFavFolder}
         syncSource={syncSource}
       />
@@ -640,7 +662,7 @@ export default function App() {
         ) : activeMode === 'hn' ? (
           <HackerNews onSaved={loadBookmarks} onClose={() => setActiveMode(null)} />
         ) : activeMode === 'add' ? (
-          <AddBookmark onAdded={loadBookmarks} onClose={() => setActiveMode(null)} />
+          <AddBookmark initialTab={addTab} onAdded={loadBookmarks} onClose={() => setActiveMode(null)} />
         ) : activeMode === 'podcast' ? (
           <BookmarkPodcast bookmarks={allBookmarks} ttsConfig={ttsConfig} onSetTtsConfig={handleSetTtsConfig} aiBackend={aiBackend} onClose={() => setActiveMode(null)} />
         ) : (

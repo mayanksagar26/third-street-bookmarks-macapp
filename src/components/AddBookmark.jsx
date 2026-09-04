@@ -129,8 +129,8 @@ function ExportImporter({ endpoint, extLabel, placeholder, onImported }) {
   );
 }
 
-export default function AddBookmark({ onAdded, onClose }) {
-  const [tab, setTab]           = useState('paste');
+export default function AddBookmark({ initialTab = 'paste', onAdded, onClose }) {
+  const [tab, setTab]           = useState(initialTab);
   const [url, setUrl]           = useState('');
   const [busy, setBusy]         = useState(false);
   const [result, setResult]     = useState(null);

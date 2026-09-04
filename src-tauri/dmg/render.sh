@@ -24,11 +24,11 @@ done
 if [[ -z "$chrome" ]]; then
   echo "No Chrome-family browser found. Install Chrome, or open" >&2
   echo "  $here/background.html" >&2
-  echo "and export a 1320x680 screenshot of the .dmg element to background@2x.png." >&2
+  echo "and export a 1320x976 screenshot of the .dmg element to background@2x.png." >&2
   exit 1
 fi
 
-# 2x device scale over a 660x340 layout gives the 1320x680 image Finder wants
+# 2x device scale over a 660x488 layout gives the 1320x976 image Finder wants
 # for the HiDPI representation.
 "$chrome" \
   --headless \
@@ -36,8 +36,16 @@ fi
   --hide-scrollbars \
   --default-background-color=00000000 \
   --force-device-scale-factor=2 \
-  --window-size=660,340 \
+  --window-size=660,488 \
   --screenshot="$here/background@2x.png" \
   "file://$here/background.html" >/dev/null 2>&1
 
-echo "Wrote $here/background@2x.png"
+# Finder wants both representations in one file, and the DMG bundler is handed
+# the TIFF rather than the PNGs. Building it here means the committed asset can
+# never drift from the HTML that describes it.
+sips -z 488 660 "$here/background@2x.png" --out "$here/background.png" >/dev/null
+tiffutil -cathidpicheck "$here/background.png" "$here/background@2x.png" \
+  -out "$here/background.tiff" >/dev/null
+rm -f "$here/background.png"
+
+echo "Wrote $here/background@2x.png and $here/background.tiff"

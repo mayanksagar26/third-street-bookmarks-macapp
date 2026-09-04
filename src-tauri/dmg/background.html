@@ -1,114 +1,96 @@
 <!--
   Source for the disk image background.
 
-  Night the whole way down: the app's own gradient, the mark in white, one
-  line of instruction, one thin arrow across the gap.
+  Ivory sheet, a serif line that says what to do, and one hand-drawn arrow
+  across the gap. The instruction is the artwork; there is nothing else on the
+  sheet, because a disk image window is read once and then never again.
 
-  One thing to know if you edit this. Finder owns the two icon labels and
-  draws them near-black whatever the Mac's appearance — the bundler can set
-  their size and nothing else, so there is no way to make them white. On this
-  sheet they sit dark on dark and are close to invisible. That is a deliberate
-  trade: the sheet is the app's colour, and the icons carry the meaning.
+  Two things to know if you edit this.
 
-  Geometry is load-bearing. Icons sit at 180,175 and 480,175 per
-  tauri.conf.json and span y=111..239 at ICON_SIZE 128, so nothing else may
-  occupy that band.
+  Finder owns the icon labels and draws them near-black whatever the Mac's
+  appearance — the bundler can set their size and nothing else. That was a real
+  problem on the old night-coloured sheet, where the labels sat dark on dark and
+  were close to invisible. On ivory they land the right way round, so the labels
+  are legible for the first time.
+
+  Geometry is load-bearing. Icons sit at 162,304 and 490,304 per
+  tauri.conf.json and span y=240..368 at ICON_SIZE 128, so nothing else may
+  occupy that band. The arrow threads the gap between them and stops short of
+  both.
 
   Regenerate with: src-tauri/dmg/render.sh
 -->
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* Bundled with the app, so this renders identically offline. */
+  /* Bundled with the app, so this renders identically offline. The italic is a
+     real cut rather than a synthesised slant: Playfair is high-contrast, and a
+     sheared roman shows it badly at this size. */
   @font-face {
     font-family: 'Playfair Display';
     font-style: normal;
-    font-weight: 600 700;
+    font-weight: 500 700;
     src: url('../../public/fonts/playfair-display-latin.woff2') format('woff2');
   }
+  @font-face {
+    font-family: 'Playfair Display';
+    font-style: italic;
+    font-weight: 500 700;
+    src: url('../../public/fonts/playfair-display-latin-italic.woff2') format('woff2');
+  }
 
-  html, body { background: #000; }
+  html, body { background: #fffded; }
 
   .dmg {
     position: relative;
     width: 660px;
-    height: 340px;
+    height: 488px;
     overflow: hidden;
+    background: #fffded;
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-    /* The app's own night gradient, sampled from the icon. */
-    background:
-      radial-gradient(620px 320px at 10% -22%, rgba(90, 170, 235, 0.15), transparent 62%),
-      radial-gradient(520px 280px at 104% 4%, rgba(255, 255, 255, 0.045), transparent 58%),
-      linear-gradient(168deg, #1c2632 0%, #131821 46%, #0c0d12 100%);
   }
 
-  /* The rim the app window carries, so the two read as one object. */
-  .dmg::after {
-    content: '';
+  .headline {
     position: absolute;
-    inset: 0;
-    pointer-events: none;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.13),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-  }
-
-  .mark {
-    position: absolute;
-    top: 46px;
-    left: 0;
-    right: 0;
+    top: 62px;
+    left: 54px;
+    right: 54px;
     text-align: center;
     font-family: 'Playfair Display', Georgia, "Times New Roman", serif;
-    font-size: 38px;
-    font-weight: 700;
-    letter-spacing: 3px;
-    /* Optical: letter-spacing pads the right side of the last glyph. */
-    text-indent: 3px;
-    color: #ffffff;
+    font-size: 43px;
+    font-weight: 500;
+    line-height: 1.24;
+    letter-spacing: -0.2px;
+    color: #000;
   }
 
-  .sub {
-    position: absolute;
-    top: 101px;
-    left: 0;
-    right: 0;
-    text-align: center;
-    font-size: 12.5px;
-    letter-spacing: 0.2px;
-    color: rgba(255, 255, 255, 0.4);
-  }
+  /* One word carries the whole instruction, so it gets the italic. */
+  .headline em { font-style: italic; font-weight: 500; }
 
-  /* One thin arrow across the gap between the icons. */
+  /* Hand-drawn rather than geometric: a ruled line next to a serif this warm
+     reads as a diagram, and the sheet is not a diagram. */
   .arrow {
     position: absolute;
-    top: 172px;
-    left: 268px;
-    width: 124px;
-    height: 1px;
-    background: linear-gradient(
-      to right,
-      rgba(255, 255, 255, 0) 0%,
-      rgba(255, 255, 255, 0.22) 26%,
-      rgba(255, 255, 255, 0.5) 100%
-    );
-  }
-  .arrow::after {
-    content: '';
-    position: absolute;
-    right: 0;
-    top: 50%;
-    width: 8px;
-    height: 8px;
-    margin: -4.5px -1px 0 0;
-    border-right: 1px solid rgba(255, 255, 255, 0.5);
-    border-top: 1px solid rgba(255, 255, 255, 0.5);
-    transform: rotate(45deg);
+    left: 282px;
+    top: 281px;
+    width: 96px;
+    height: 46px;
   }
 </style>
 
 <div class="dmg">
-  <div class="mark">TSB</div>
-  <div class="sub">Drag the app into your Applications folder</div>
-  <div class="arrow"></div>
+  <div class="headline">To install, <em>drag</em> Third&nbsp;Street<br>to Applications</div>
+
+  <svg class="arrow" viewBox="0 0 96 46" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- One stroke: a shallow dip, a loop that crosses its own tail, then away
+         to the upper right. Drawn flat and wide — a tall arc next to a serif
+         this large reads as a swoosh rather than a gesture. -->
+    <path
+      d="M3 6 C 6 26, 22 38, 40 34 C 52 31, 54 18, 46 16 C 38 14, 34 26, 46 32 C 60 39, 76 32, 88 16"
+      stroke="#f2a852" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Arrowhead as its own two strokes, so it keeps the same hand as the sweep. -->
+    <path
+      d="M76 10 L90 13 L87 27"
+      stroke="#f2a852" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
 </div>

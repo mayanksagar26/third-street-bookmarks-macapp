@@ -26,7 +26,7 @@ function timeAgo(iso) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-export default function HackerNews({ onSaved, onClose }) {
+export default function HackerNews({ onSaved, onClose, embedded = false }) {
   const [tab, setTab]         = useState('ai');
   const [stories, setStories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -81,17 +81,23 @@ export default function HackerNews({ onSaved, onClose }) {
   const visible = showSaved ? matching : matching.filter(s => !s.alreadySaved);
 
   return (
-    <div className="hn-pane">
-      <div className="hn-header">
-        <div className="hn-title">
-          <SourceIcon source="hn" size={20} style={{ color: '#ff6600' }} />
-          <div>
-            <h2>Hacker News</h2>
-            <span className="hn-sub">{TABS.find(t => t.id === tab)?.hint}</span>
+    <div className={embedded ? 'hn-pane is-embedded' : 'hn-pane'}>
+      {/* Embedded inside a source view, the surrounding view already names the
+          source and owns the close button. Only the tab's own hint is left. */}
+      {embedded ? (
+        <div className="hn-sub embedded-sub">{TABS.find(t => t.id === tab)?.hint}</div>
+      ) : (
+        <div className="hn-header">
+          <div className="hn-title">
+            <SourceIcon source="hn" size={20} style={{ color: '#ff6600' }} />
+            <div>
+              <h2>Hacker News</h2>
+              <span className="hn-sub">{TABS.find(t => t.id === tab)?.hint}</span>
+            </div>
           </div>
+          <button className="hn-close" onClick={onClose} title="Back to the feed">✕</button>
         </div>
-        <button className="hn-close" onClick={onClose} title="Back to the feed">✕</button>
-      </div>
+      )}
 
       <div className="hn-toolbar">
         <div className="hn-tabs">

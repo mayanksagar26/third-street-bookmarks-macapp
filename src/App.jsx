@@ -12,6 +12,7 @@ import VoiceBubble from './components/VoiceBubble';
 import Settings from './components/Settings';
 import HackerNews from './components/HackerNews';
 import AddBookmark from './components/AddBookmark';
+import SourceView from './components/SourceView';
 import { DEFAULT_SOURCE } from './sources';
 import { getBookmarkSource } from './bookmark-sources';
 
@@ -69,6 +70,17 @@ export default function App() {
   const [settingsOpen, setSettingsOpen]         = useState(false);
   // Which tab the add pane opens on when a source row sends you there.
   const [addTab, setAddTab]                     = useState('paste');
+  // Source is its own axis, not another value of `currentFilter`.
+  //
+  // While they shared one variable, picking a source *replaced* "All Bookmarks"
+  // rather than narrowing it, so the two could never both be lit and clicking
+  // All Bookmarks silently dropped the source you were looking at. They are
+  // different questions — which source, and read or unread — and they compose.
+  const [sourceFilter, setSourceFilter]         = useState(null);
+  const [sourceTab, setSourceTab]               = useState('saved');
+  // A container the source owns (a YouTube playlist, an Instagram collection),
+  // scoped to the source view rather than the sidebar's global folder list.
+  const [sourceFolder, setSourceFolder]         = useState(null);
 
   // The native menu's Settings item (Cmd+,) reaches React through an event,
   // since the menu lives in Rust and has no other handle on this tree.
@@ -272,10 +284,12 @@ export default function App() {
       } else if (currentFilter.startsWith('fav:')) {
         const folder = currentFilter.slice(4);
         result = result.filter(b => favMap[b.id]?.includes(folder));
-      } else if (currentFilter.startsWith('source:')) {
-        const src = currentFilter.slice(7);
-        result = result.filter(b => (b.source || 'x') === src);
       }
+    }
+
+    if (sourceFilter) {
+      result = result.filter(b => (b.source || 'x') === sourceFilter);
+      if (sourceFolder) result = result.filter(b => (b.folderNames || []).includes(sourceFolder));
     }
 
     if (currentVoice) result = result.filter(b => b.authorHandle === currentVoice);
@@ -296,7 +310,7 @@ export default function App() {
     }
 
     return sortBookmarks(result, currentSort);
-  }, [allBookmarks, currentFilter, currentSort, searchQuery, readIds, favMap, notesMap, currentVoice, showUnreadOnly, selectedCategories]);
+  }, [allBookmarks, currentFilter, currentSort, searchQuery, readIds, favMap, notesMap, currentVoice, showUnreadOnly, selectedCategories, sourceFilter, sourceFolder]);
 
   /**
    * Identity of the current view, for the feed's leave animation.
@@ -309,8 +323,9 @@ export default function App() {
     () => [
       currentFilter, currentSort, searchQuery, showUnreadOnly ? 'unread' : 'all',
       currentVoice || '', [...selectedCategories].sort().join('+'),
+      sourceFilter || '', sourceFolder || '',
     ].join('|'),
-    [currentFilter, currentSort, searchQuery, showUnreadOnly, currentVoice, selectedCategories],
+    [currentFilter, currentSort, searchQuery, showUnreadOnly, currentVoice, selectedCategories, sourceFilter, sourceFolder],
   );
 
   const unreadCount = useMemo(() => allBookmarks.filter(b => !readIds.has(b.id)).length, [allBookmarks, readIds]);
@@ -590,8 +605,9 @@ export default function App() {
     // never hidden by read state.
     if (filter === 'all' || filter.startsWith('fav:')) setShowUnreadOnly(false);
     // Picking anything in the sidebar is a request to look at the feed. Leaving
-    // the Hacker News or add pane covering it meant the click appeared to do
-    // nothing at all.
+    // a tool pane covering it meant the click appeared to do nothing at all.
+    // The source filter deliberately survives: "All Bookmarks" answers read-or-
+    // unread, not which-source, and clearing one from the other loses your place.
     setActiveMode(null);
     setCurrentPage(1);
     setFocusedIdx(-1);
@@ -616,14 +632,49 @@ export default function App() {
    * which lives in the right panel, so that row stays inert and says so in its
    * tooltip.
    */
-  const handleSourceAction = useCallback((action) => {
-    if (!action) return;
-    if (action === 'hn') { setActiveMode('hn'); return; }
-    if (action.startsWith('add:')) {
-      setAddTab(action.slice(4));
-      setActiveMode('add');
-    }
+  /** Open a source, on the tab that answers what the click was asking for. */
+  const openSource = useCallback((id, tab = 'saved') => {
+    setSourceFilter(id);
+    setSourceTab(tab);
+    setSourceFolder(null);
+    setActiveMode(null);
+    setCurrentPage(1);
+    setFocusedIdx(-1);
   }, []);
+
+  const handleSourceClick = useCallback((id) => {
+    // Clicking the source you are already in closes it, the way every other
+    // filter in this sidebar toggles.
+    setSourceFilter(prev => (prev === id ? null : id));
+    setSourceTab('saved');
+    setSourceFolder(null);
+    setActiveMode(null);
+    setCurrentPage(1);
+    setFocusedIdx(-1);
+  }, []);
+
+  /** The badge on a source row — "Add" when it is empty, "Open" when it isn't. */
+  const handleSourceAction = useCallback((id) => {
+    openSource(id, 'browse');
+  }, [openSource]);
+
+  // One definition, two mount points: the ordinary feed, and the Saved tab
+  // inside a source view. Duplicating twenty props across both is how one of
+  // them quietly loses a handler.
+  const feedProps = {
+    bookmarks: filtered,
+    page: currentPage,
+    pageSize: PAGE_SIZE,
+    loading, error, searchQuery, readIds, favMap, favFolders, notesMap,
+    focusedIdx, viewKey, ttsConfig,
+    onToggleRead: handleToggleRead,
+    onSetFavFolders: handleSetFavFolders,
+    onRenameFavFolder: handleRenameFavFolder,
+    onUpdateNote: handleUpdateNote,
+    onBulkRead: handleBulkRead,
+    onPageChange: (p) => { setCurrentPage(p); setFocusedIdx(-1); },
+    onSpeakBookmark: (bm) => handleTtsSpeak(`From ${bm.authorName || bm.authorHandle}: ${cleanForVoice(bm.text)}`),
+  };
 
   const handleVoiceClick = useCallback((handle) => {
     setCurrentVoice(prev => prev === handle ? null : handle);
@@ -647,6 +698,8 @@ export default function App() {
         favFolders={favFolders}
         folderCounts={folderCounts}
         sourceCounts={sourceCounts}
+        sourceFilter={sourceFilter}
+        onSourceClick={handleSourceClick}
         onSourceAction={handleSourceAction}
         onRenameFavFolder={handleRenameFavFolder}
         syncSource={syncSource}
@@ -684,30 +737,31 @@ export default function App() {
               onSetTtsConfig={handleSetTtsConfig}
               onCloseVoiceSetup={() => setShowVoiceSetup(false)}
             />
+            {/* A source turns the column into that source's own place: its saved
+                list, and the surface that adds to it. Without a source selected
+                this is the ordinary feed and nothing changes. */}
+            {sourceFilter ? (
+              <SourceView
+                sourceId={sourceFilter}
+                tab={sourceTab}
+                onTabChange={setSourceTab}
+                onClose={() => { setSourceFilter(null); setSourceFolder(null); setCurrentPage(1); }}
+                bookmarks={allBookmarks}
+                savedCount={sourceCounts[sourceFilter] || 0}
+                onAdded={loadBookmarks}
+                activeFolder={sourceFolder}
+                onPickFolder={(f) => { setSourceFolder(f); setSourceTab('saved'); setCurrentPage(1); }}
+              >
+                <SortBar currentSort={currentSort} onSort={(s) => { setCurrentSort(s); setCurrentPage(1); }} />
+                <Feed {...feedProps} />
+              </SourceView>
+            ) : (
+            <>
             <SortBar currentSort={currentSort} onSort={(s) => { setCurrentSort(s); setCurrentPage(1); }} />
             {!loading && !error && <StatsBar bookmarks={allBookmarks} />}
-            <Feed
-              bookmarks={filtered}
-              page={currentPage}
-              pageSize={PAGE_SIZE}
-              loading={loading}
-              error={error}
-              searchQuery={searchQuery}
-              readIds={readIds}
-              favMap={favMap}
-              favFolders={favFolders}
-              notesMap={notesMap}
-              focusedIdx={focusedIdx}
-              viewKey={viewKey}
-              onToggleRead={handleToggleRead}
-              onSetFavFolders={handleSetFavFolders}
-              onRenameFavFolder={handleRenameFavFolder}
-              onUpdateNote={handleUpdateNote}
-              onBulkRead={handleBulkRead}
-              onPageChange={(p) => { setCurrentPage(p); setFocusedIdx(-1); }}
-              ttsConfig={ttsConfig}
-              onSpeakBookmark={(bm) => handleTtsSpeak(`From ${bm.authorName || bm.authorHandle}: ${cleanForVoice(bm.text)}`)}
-            />
+            <Feed {...feedProps} />
+            </>
+            )}
           </>
         )}
       </main>

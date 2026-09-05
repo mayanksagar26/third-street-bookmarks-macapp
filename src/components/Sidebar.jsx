@@ -28,7 +28,7 @@ export default function Sidebar({
   catCounts, selectedCategories, onToggleCategory, onClearCategories,
   favMap, favFolders, folderCounts, onRenameFavFolder,
   sourceCounts = {},
-  onSourceAction,
+  sourceFilter, onSourceClick, onSourceAction,
   syncSource,
 }) {
   const [catSearch, setCatSearch] = useState('');
@@ -130,7 +130,8 @@ export default function Sidebar({
           const src = getBookmarkSource(id);
           const count = sourceCounts[id] || 0;
           const empty = count === 0;
-          const actionable = empty && Boolean(src.action);
+          const actionable = empty && Boolean(src.browseLabel);
+          const selected = sourceFilter === id;
           return (
             <div
               key={id}
@@ -138,12 +139,9 @@ export default function Sidebar({
                 `sidebar-item source-item` +
                 (empty ? ' is-empty' : '') +
                 (actionable ? ' is-actionable' : '') +
-                (currentFilter === `source:${id}` ? ' active' : '')
+                (selected ? ' active' : '')
               }
-              onClick={() => {
-                if (!empty) onFilterChange(`source:${id}`);
-                else if (actionable) onSourceAction?.(src.action);
-              }}
+              onClick={() => onSourceClick?.(id)}
               title={empty ? src.emptyHint : `${count} from ${src.label}`}
             >
               <span className="sidebar-item-left">
@@ -152,15 +150,24 @@ export default function Sidebar({
                 <SourceIcon source={id} size={16} style={empty ? undefined : { color: src.accent }} />
                 {src.label}
               </span>
-              {/* Filled or empty, a source with a surface keeps a way back to
-                  it. The row body filters; this opens. Without it, browsing
-                  Hacker News a second time meant going via the Tools menu, and
-                  re-importing a playlist had no entry point at all. */}
-              {src.action ? (
+              {/* Selected: a way out, so leaving a source doesn't mean hunting
+                  for which other row resets it.
+                  Otherwise: the badge jumps straight to the source's own
+                  surface — "Add" when it holds nothing, "Open" when it does. */}
+              {selected ? (
+                <button
+                  className="sidebar-badge src-action is-clear"
+                  onClick={e => { e.stopPropagation(); onSourceClick?.(id); }}
+                  title={`Stop filtering by ${src.label}`}
+                >
+                  <span className="src-count">{count}</span>
+                  <span className="src-add">✕</span>
+                </button>
+              ) : src.browseLabel ? (
                 <button
                   className="sidebar-badge src-action"
-                  onClick={e => { e.stopPropagation(); onSourceAction?.(src.action); }}
-                  title={empty ? src.emptyHint : `Open ${src.label}`}
+                  onClick={e => { e.stopPropagation(); onSourceAction?.(id); }}
+                  title={empty ? src.emptyHint : `Open ${src.browseLabel}`}
                 >
                   <span className="src-count">{count}</span>
                   <span className="src-add">{empty ? 'Add' : 'Open'}</span>

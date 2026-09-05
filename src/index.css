@@ -2868,6 +2868,13 @@ kbd {
   padding: 0 2px;
 }
 
+/* Selected wins over empty. Without this an empty source you are *in* renders
+   greyer than a filled source you are not in — the selection reading as less
+   prominent than the thing beside it, which is backwards. */
+.sidebar-item.source-item.is-empty.active { color: var(--accent); }
+.sidebar-item.source-item.is-empty.active svg { opacity: 1; }
+.sidebar-item.source-item.is-empty.active .sidebar-badge { opacity: 1; color: var(--accent); }
+
 /* Clearing a source reads as a dismissal, not a destination. */
 .sidebar-badge.src-action.is-clear { border-color: var(--accent); }
 .source-item.active .src-action.is-clear .src-count { display: inline; }

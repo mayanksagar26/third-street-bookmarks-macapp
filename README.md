@@ -87,6 +87,28 @@ anything real.
 
 ## What it looks like
 
+The feed above is every source at once. The sidebar lists all of them from the
+first launch — greyed until you have put something in one, so you can see what
+the app holds before you own any of it. Favourite folders span sources: an
+article, a tweet and a video can share one.
+
+**Each source is also a place, not just a filter.** Opening one gives you its saved
+list and the surface that adds to it. On Hacker News that is the front page —
+browsed live, saving nothing until you press Save, with stories already in your
+collection dropped from the list so the same twenty things aren't re-offered
+every morning:
+
+![Browsing Hacker News](docs/screenshots/07-hackernews.png)
+
+**Your playlists and collections, in the same window.** YouTube shows what you
+have imported and the two ways to import more; Instagram links straight to the
+page that starts its export. Both importers are two-phase — read the file, show
+what is inside, import only what you tick:
+
+![YouTube playlists and import](docs/screenshots/08-youtube.png)
+
+![Instagram export import](docs/screenshots/09-instagram.png)
+
 Onboarding — four steps, skippable:
 
 ![Onboarding](docs/screenshots/01-onboarding.png)
@@ -107,7 +129,7 @@ free browser TTS, or ElevenLabs / Sarvam if you want better voices:
 
 ![Bookmark podcast](docs/screenshots/06-podcast.png)
 
-All the AI tools live in one menu:
+Adding and browsing live in the same menu as the AI tools:
 
 ![Tools menu](docs/screenshots/03-tools.png)
 
@@ -116,8 +138,14 @@ All the AI tools live in one menu:
 ## Sources
 
 One collection, several origins. **All Bookmarks** is everything; the **Sources**
-list in the sidebar filters by where a thing came from. Favourites are yours and
-span every source — the folders you make are never touched by a sync.
+list in the sidebar narrows it by where a thing came from. The two are separate
+questions and compose: All Bookmarks or Unread Only answers *read or unread*,
+the source answers *from where*, and both stay lit at once. Favourites are yours
+and span every source — the folders you make are never touched by a sync.
+
+Clicking a source opens it. Every source shows what you kept from it, and every
+source but X adds a second tab for the surface that puts things in — X's only
+route in is a Field Theory sync, so it goes straight to its feed.
 
 | Source | How it gets in | Needs |
 |---|---|---|
@@ -383,4 +411,6 @@ dependency, universal build.
 Built on [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks),
 powered by [Field Theory](https://github.com/afar1/fieldtheory-cli) by Andrew Farah.
 
-Screenshots show the bundled sample collection, not real bookmark data.
+Screenshots show the bundled sample collection plus a handful of public Hacker
+News, YouTube and web links — not real bookmark data. The Instagram entries are
+fixtures in the export's shape.

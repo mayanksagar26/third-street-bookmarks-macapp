@@ -66,6 +66,7 @@ export default function SourceView({
 }) {
   const src = getBookmarkSource(sourceId);
   const folders = useSourceFolders(bookmarks, sourceId);
+  const hasTabs = Boolean(src.browseLabel);
 
   function browsePanel() {
     if (sourceId === 'hn') return <HackerNews embedded onSaved={onAdded} />;
@@ -107,26 +108,31 @@ export default function SourceView({
         <div className="source-view-title">
           <SourceIcon source={sourceId} size={20} style={{ color: src.accent }} />
           <h2>{src.label}</h2>
+          {!hasTabs && <span className="source-view-count">{savedCount}</span>}
         </div>
         <button className="hn-close" onClick={onClose} title={`Stop filtering by ${src.label}`}>✕</button>
       </div>
 
-      <div className="source-tabs">
-        <button
-          className={`source-tab ${tab === 'saved' ? 'active' : ''}`}
-          onClick={() => onTabChange('saved')}
-        >
-          Saved<span className="source-tab-count">{savedCount}</span>
-        </button>
-        {src.browseLabel && (
+      {/* Tabs only where there is a choice to make. X has no surface of its own
+          — its one route in is a Field Theory sync from the right panel — so a
+          lone "Saved" tab would be a control that selects the thing already on
+          screen. The count moves to the header instead. */}
+      {hasTabs ? (
+        <div className="source-tabs">
+          <button
+            className={`source-tab ${tab === 'saved' ? 'active' : ''}`}
+            onClick={() => onTabChange('saved')}
+          >
+            Saved<span className="source-tab-count">{savedCount}</span>
+          </button>
           <button
             className={`source-tab ${tab === 'browse' ? 'active' : ''}`}
             onClick={() => onTabChange('browse')}
           >
             {src.browseLabel}
           </button>
-        )}
-      </div>
+        </div>
+      ) : null}
 
       {activeFolder && tab === 'saved' && (
         <div className="src-folder-chip">
@@ -135,7 +141,7 @@ export default function SourceView({
         </div>
       )}
 
-      {tab === 'saved' ? children : browsePanel()}
+      {!hasTabs || tab === 'saved' ? children : browsePanel()}
     </div>
   );
 }

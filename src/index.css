@@ -2880,3 +2880,19 @@ kbd {
 .source-item.active .src-action.is-clear .src-count { display: inline; }
 .source-item.active .src-action.is-clear:hover .src-count { display: none; }
 .source-item.active .src-action.is-clear:hover .src-add { display: inline; color: var(--accent); }
+
+/* A source with no second tab still wants its count somewhere. */
+.source-view-count {
+  margin-left: 2px;
+  padding: 1px 9px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+/* Without tabs the feed sits straight under the header, so it needs the gap
+   the tab strip used to provide. */
+.source-view:not(:has(.source-tabs)) .source-view-head { padding-bottom: 12px; }

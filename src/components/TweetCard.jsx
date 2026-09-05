@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import FavFolderPicker from './FavFolderPicker';
+import { getBookmarkSource, SourceIcon } from '../bookmark-sources';
 
 const CAT_CLASS = {
   technology:'cat-technology', tech:'cat-technology',
@@ -38,8 +39,23 @@ function isOnlyLink(text) {
  */
 function tweetUrl(b) {
   if (b.url) return b.url;
-  const id = b.tweetId || b.id;
+  // Ids are namespaced now (`x:1789…`), so the raw one has to come from
+  // `rawId`/`tweetId` — pasting the namespaced id into a status URL 404s.
+  const id = b.tweetId || b.rawId;
   if (b.authorHandle && id) return `https://x.com/${b.authorHandle}/status/${id}`;
+  return null;
+}
+
+/**
+ * Where the author's name should link.
+ *
+ * Only X has a profile page we can rebuild from a handle. A Hacker News
+ * username or a YouTube channel title is not an x.com URL, and sending it there
+ * was the bug that made every non-X card's byline lie about where it went.
+ */
+function authorUrl(b) {
+  if (b.source === 'x' || !b.source) return b.authorHandle ? `https://x.com/${b.authorHandle}` : null;
+  if (b.source === 'hn') return b.authorHandle ? `https://news.ycombinator.com/user?id=${b.authorHandle}` : null;
   return null;
 }
 
@@ -110,6 +126,16 @@ export default function TweetCard({
 
   const handle = b.authorHandle || '';
   const name = b.authorName || handle;
+  const src = getBookmarkSource(b.source || 'x');
+  const isX = (b.source || 'x') === 'x';
+  const profileUrl = authorUrl(b);
+  // A tweet's text is the content. Everywhere else the title is, and the text
+  // is a description underneath it.
+  // A Takeout import arrives with ids and no titles until enrichment catches
+  // up, and a deleted video never gets one. The link is a worse heading than a
+  // title but a much better one than an empty card.
+  const heading = !isX ? (b.title || (!b.text ? b.url : null)) : null;
+  const showTitle = Boolean(heading) && heading !== b.text && heading !== name;
   const cats = b.categories?.length ? b.categories : (b.primaryCategory && b.primaryCategory !== 'unclassified' ? [b.primaryCategory] : []);
   const addedDate = formatAdded(b.bookmarkedAt || b.syncedAt);
   const qt = b.quotedTweet;
@@ -132,25 +158,44 @@ export default function TweetCard({
     >
       <a
         className="tweet-avatar"
-        href={`https://x.com/${handle}`}
+        href={profileUrl || tweetUrl(b) || '#'}
         target="_blank"
         rel="noopener noreferrer"
         onClick={e => e.stopPropagation()}
       >
         {b.authorProfileImageUrl
           ? <img src={b.authorProfileImageUrl} alt="" loading="lazy" onError={e => e.target.style.display='none'} />
-          : <div className="tweet-avatar-placeholder">{(name[0] || '?').toUpperCase()}</div>
+          : isX
+            ? <div className="tweet-avatar-placeholder">{(name[0] || '?').toUpperCase()}</div>
+            : (
+              // Only X ships avatars. A letter tile for every HN and YouTube
+              // row reads as a broken image; the source mark says something true.
+              <div className="tweet-avatar-placeholder src" style={{ color: src.accent }}>
+                <SourceIcon source={b.source} size={18} />
+              </div>
+            )
         }
       </a>
 
       <div className="tweet-body">
         <div className="tweet-header">
-          <a className="tweet-name" href={`https://x.com/${handle}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
-            {name}
-          </a>
-          <a className="tweet-handle" href={`https://x.com/${handle}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
-            @{handle}
-          </a>
+          {profileUrl ? (
+            <a className="tweet-name" href={profileUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+              {name}
+            </a>
+          ) : (
+            <span className="tweet-name">{name || src.label}</span>
+          )}
+          {handle && (isX
+            ? <a className="tweet-handle" href={profileUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>@{handle}</a>
+            : <span className="tweet-handle">{b.domain || src.label}</span>
+          )}
+          {!isX && (
+            <span className="src-badge" style={{ color: src.accent, borderColor: `${src.accent}44` }} title={`Saved from ${src.label}`}>
+              <SourceIcon source={b.source} size={11} />
+              {src.short || src.label}
+            </span>
+          )}
           <span className="tweet-date">{formatDate(b.postedAt)}</span>
 
           <div className="tweet-card-actions">
@@ -220,10 +265,40 @@ export default function TweetCard({
           </div>
         </div>
 
-        <div
-          className="tweet-text"
-          dangerouslySetInnerHTML={{ __html: getProcessedText(b.text, searchQuery) }}
-        />
+        {showTitle && (
+          <a
+            className="tweet-title"
+            href={tweetUrl(b) || '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+          >
+            {heading}
+          </a>
+        )}
+
+        {b.text && (
+          <div
+            className="tweet-text"
+            dangerouslySetInnerHTML={{ __html: getProcessedText(b.text, searchQuery) }}
+          />
+        )}
+
+        {/* A video or article without its thumbnail is a worse row than a plain
+            link. Instagram deliberately has none: its CDN URLs are signed and
+            expire, so a preview would be broken by the time you read it. */}
+        {b.thumbnailUrl && (
+          <a
+            className={`tweet-thumb ${b.source === 'yt' ? 'is-video' : ''}`}
+            href={tweetUrl(b) || '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+          >
+            <img src={b.thumbnailUrl} alt="" loading="lazy" onError={e => { e.target.parentElement.style.display = 'none'; }} />
+            {b.duration && <span className="tweet-thumb-duration">{b.duration}</span>}
+          </a>
+        )}
 
         {/* Quoted tweet */}
         {hasQuote && (

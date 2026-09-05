@@ -6,12 +6,19 @@ const { spawn } = require('child_process');
 const { detectRuntimes, findBinary } = require('./agents');
 const { discover } = require('./discover');
 const { agentEnv, buildAgentArgs } = require('./agent-run');
+const store = require('./sources-store');
+const hn = require('./ingest/hn');
+const yt = require('./ingest/youtube');
+const ytTakeout = require('./ingest/youtube-takeout');
+const instagram = require('./ingest/instagram');
+const linkIngest = require('./ingest/link');
 const {
   createCors,
   createGuard,
   resolveToken,
   securityHeaders,
   validateBookmarkPath,
+  validateImportPath,
   validatePrompt,
 } = require('./security');
 
@@ -244,7 +251,7 @@ function migrateState(conn) {
       const tx = conn.transaction(rows => {
         for (const b of rows) {
           if (b.isRead || b.favFolder || (b.favFolders && b.favFolders.length) || b.colorLabel || b.note) {
-            ins.run(b.id, b.isRead ? 1 : 0, b.favFolder || (b.favFolders && b.favFolders[0]) || null, b.colorLabel || null, b.note || null, now);
+            ins.run(store.nsId('x', b.id), b.isRead ? 1 : 0, b.favFolder || (b.favFolders && b.favFolders[0]) || null, b.colorLabel || null, b.note || null, now);
             seeded++;
           }
         }
@@ -260,7 +267,7 @@ function migrateState(conn) {
             is_read     = COALESCE(excluded.is_read,     is_read),
             fav_folder  = COALESCE(excluded.fav_folder,  fav_folder),
             color_label = COALESCE(excluded.color_label, color_label)`);
-        const tx = conn.transaction(rs => { for (const r of rs) up.run(r.id, r.is_read, r.fav_folder, r.color_label, now); });
+        const tx = conn.transaction(rs => { for (const r of rs) up.run(store.nsId('x', r.id), r.is_read, r.fav_folder, r.color_label, now); });
         tx(rows);
       }
     } catch {}
@@ -279,13 +286,49 @@ function migrateState(conn) {
         }
         try {
           const data = JSON.parse(fs.readFileSync(bookmarksPath(), 'utf8'));
-          for (const b of data) for (const f of (b.favFolders || [])) if (f) ins.run(b.id, f, now);
+          for (const b of data) for (const f of (b.favFolders || [])) if (f) ins.run(store.nsId('x', b.id), f, now);
         } catch {}
       });
       tx();
       console.log(`  [state.db] fav_membership rows: ${conn.prepare('SELECT COUNT(*) c FROM fav_membership').get().c}`);
     }
   } catch {}
+
+  migrateIds(conn);
+}
+
+/**
+ * Namespace every id written before this app had more than one source.
+ *
+ * Those rows are keyed by a bare tweet id. Once Hacker News is in the same
+ * table, item 12345 and tweet 12345 are the same key — the HN story silently
+ * inherits the tweet's read state and favourite folders. That reads as data
+ * corruption and is near-impossible to trace, so it gets fixed once, here,
+ * before any second source can write a row.
+ *
+ * Guarded by a marker rather than by checking the rows, because a legitimately
+ * empty table would otherwise re-run this on every boot.
+ */
+function migrateIds(conn) {
+  try {
+    conn.exec('CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT)');
+    const done = conn.prepare("SELECT value FROM schema_meta WHERE key = 'ids_namespaced'").get();
+    if (done) return;
+
+    // OR REPLACE rather than a plain UPDATE: if a namespaced row somehow
+    // already exists alongside its bare twin, the namespaced one is the newer
+    // truth and a PK collision here would abort the whole migration.
+    const tx = conn.transaction(() => {
+      conn.exec("UPDATE OR REPLACE user_state     SET id = 'x:' || id WHERE instr(id, ':') = 0");
+      conn.exec("UPDATE OR REPLACE fav_membership SET id = 'x:' || id WHERE instr(id, ':') = 0");
+      conn.prepare("INSERT INTO schema_meta (key, value) VALUES ('ids_namespaced', ?)")
+        .run(new Date().toISOString());
+    });
+    tx();
+    console.log('  [state.db] namespaced legacy ids to x:');
+  } catch (e) {
+    console.log(`  [state.db] id migration skipped: ${e.message}`);
+  }
 }
 
 // Partial upsert: only writes the fields present in `fields`, so null is a real
@@ -464,15 +507,26 @@ function writeSettings(data) {
 }
 
 // ── Bookmarks I/O ─────────────────────────────────────────────────────────────
-function readBookmarks() {
+function readXBookmarks() {
   // A fresh install has no collection yet — that's an empty feed, not a 500.
   // The UI's empty state tells the user to run a sync.
   if (!fs.existsSync(bookmarksPath())) return [];
   return JSON.parse(fs.readFileSync(bookmarksPath(), 'utf8'));
 }
 
-function writeBookmarks(data) {
+function writeXBookmarks(data) {
   fs.writeFileSync(bookmarksPath(), JSON.stringify(data, null, 2));
+}
+
+// Everything below this line sees one collection. The split back into
+// per-source files happens in the store, because callers mutate a single record
+// inside the merged array and hand the whole thing back.
+function readBookmarks() {
+  return store.readAll(DATA_DIR, readXBookmarks);
+}
+
+function writeBookmarks(data) {
+  store.writeAll(DATA_DIR, data, writeXBookmarks);
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -588,6 +642,169 @@ app.post('/api/adopt-bookmarks', (req, res) => {
 
   writeSettings({ ...readSettings(), bookmarksPath: resolved });
   res.json({ ok: true, path: resolved, count });
+});
+
+// ── Sources ───────────────────────────────────────────────────────────────────
+// How many bookmarks each source contributes, for the sidebar's source list.
+app.get('/api/source-counts', (req, res) => {
+  try { res.json(store.counts(readBookmarks())); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+/**
+ * Add records to a source and report what landed.
+ *
+ * Shared by every ingest route so "saved 3, 12 already there" is worded the
+ * same everywhere, and so no route can forget that re-importing is normal.
+ */
+function ingest(source, records) {
+  const { added, total } = store.upsertSource(DATA_DIR, source, records);
+  return { ok: true, added, skipped: records.length - added, total };
+}
+
+// ── Hacker News ───────────────────────────────────────────────────────────────
+// Browsing is live and stores nothing. Only an explicit save writes, because a
+// front page that imported itself every morning would bury the things you
+// actually chose to keep.
+app.get('/api/hn/top', async (req, res) => {
+  try {
+    const stories = await hn.topStories({ tab: req.query.tab, limit: req.query.limit });
+    const saved = new Set(store.readSource(DATA_DIR, 'hn').map(r => r.id));
+    res.json(stories.map(s => ({ ...s, alreadySaved: saved.has(s.id) })));
+  } catch (e) {
+    res.status(502).json({ error: `Hacker News is not reachable: ${e.message}` });
+  }
+});
+
+/**
+ * Save one story.
+ *
+ * The client posts back a record it got from /api/hn/top, but it is rebuilt
+ * here from named fields rather than stored as sent — a route that writes
+ * whatever shape arrives is a route that will eventually write something else
+ * into the collection.
+ */
+app.post('/api/hn/save', (req, res) => {
+  const item = req.body?.item || {};
+  const rawId = String(item.rawId || item.id || '').replace(/^hn:/, '');
+  if (!/^\d+$/.test(rawId)) return res.status(400).json({ error: 'not a Hacker News id' });
+  try {
+    const record = hn.toRecord({
+      objectID: rawId,
+      title: String(item.title || '').slice(0, 500),
+      url: item.url && /^https?:\/\//i.test(item.url) ? item.url : undefined,
+      author: String(item.authorHandle || '').slice(0, 100) || undefined,
+      points: Number(item.points) || 0,
+      num_comments: Number(item.commentCount) || 0,
+      created_at: item.postedAt,
+      story_text: String(item.text || '').slice(0, 20000),
+    });
+    res.json({ ...ingest('hn', [record]), record });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Save any URL ──────────────────────────────────────────────────────────────
+// The route that makes this a bookmark manager rather than three integrations.
+// YouTube is split out because oEmbed gives better metadata than the page does.
+app.post('/api/save-url', async (req, res) => {
+  const raw = String(req.body?.url || '').trim();
+  if (!/^https?:\/\//i.test(raw)) {
+    return res.status(400).json({ error: 'Paste a full http(s) URL' });
+  }
+  try {
+    if (yt.videoId(raw)) {
+      const record = await yt.viaOembed(raw);
+      return res.json({ ...ingest('yt', [record]), record, source: 'yt' });
+    }
+    const record = await linkIngest.saveUrl(raw);
+    res.json({ ...ingest('link', [record]), record, source: 'link' });
+  } catch (e) {
+    res.status(502).json({ error: `Could not save that link: ${e.message}` });
+  }
+});
+
+// ── YouTube playlist (public, API key only — no OAuth consent screen) ─────────
+app.post('/api/youtube/playlist', async (req, res) => {
+  const url = String(req.body?.url || '').trim();
+  const apiKey = String(req.body?.apiKey || readSettings().youtubeApiKey || '').trim();
+  if (!url) return res.status(400).json({ error: 'Paste a playlist URL' });
+  if (!apiKey) return res.status(400).json({ error: 'Add a YouTube API key in Settings first' });
+  try {
+    const { title, records } = await yt.importPlaylist({ url, apiKey });
+    if (!records.length) return res.status(404).json({ error: 'That playlist is empty or not public' });
+    res.json({ ...ingest('yt', records), playlist: title });
+  } catch (e) {
+    const hint = /HTTP 403/.test(e.message)
+      ? ' — check the key has the YouTube Data API enabled'
+      : /HTTP 404/.test(e.message) ? ' — that playlist is private or does not exist' : '';
+    res.status(502).json({ error: `${e.message}${hint}` });
+  }
+});
+
+// ── Instagram (official export) ───────────────────────────────────────────────
+// Where to go to request it. Surfaced by the server so the button in the UI and
+// the docs can never drift apart.
+app.get('/api/instagram/download-urls', (req, res) => res.json(instagram.DOWNLOAD_URLS));
+
+/**
+ * Two-phase, both here.
+ *
+ * Without `only`, this reads the export and answers with the collection names
+ * and their sizes — nothing is written. With `only`, it imports just those.
+ * That ordering is the feature: the point of an export over a live scrape is
+ * that you choose the three collections you want, not everything you ever
+ * tapped save on.
+ */
+app.post('/api/import/instagram', (req, res) => {
+  let target;
+  try {
+    target = validateImportPath(req.body?.path, { extensions: ['.json'], allowDir: true });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+  try {
+    const only = Array.isArray(req.body?.only) ? req.body.only : null;
+    const { files, collections, records } = instagram.readExport(target, { only });
+    if (!only) return res.json({ preview: true, files, collections });
+    res.json({ ...ingest('ig', records), collections, files });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ── YouTube (Google Takeout) ──────────────────────────────────────────────────
+// The only route to Watch Later: Google removed API access to it in 2016.
+app.post('/api/import/youtube', async (req, res) => {
+  let target;
+  try {
+    target = validateImportPath(req.body?.path, { extensions: ['.csv'], allowDir: true });
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+  try {
+    const only = Array.isArray(req.body?.only) ? req.body.only : null;
+    const { files, playlists, records } = ytTakeout.readTakeout(target, { only });
+    if (!only) return res.json({ preview: true, files, collections: playlists });
+    // A Takeout CSV is video ids and nothing else. Without this the import
+    // succeeds and leaves you with a screen of identical untitled rows.
+    await yt.enrichTitles(records);
+    res.json({ ...ingest('yt', records), collections: playlists, files });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Remove a saved item. Only sources this app owns — X records come back on the
+// next `ft sync`, so deleting one here would be a button that undoes itself.
+app.delete('/api/saved/:id', (req, res) => {
+  const { source } = store.splitId(req.params.id);
+  if (!store.MANAGED.includes(source)) {
+    return res.status(400).json({ error: 'That bookmark belongs to a synced source' });
+  }
+  const removed = store.removeFromSource(DATA_DIR, source, req.params.id);
+  res.json({ ok: true, removed });
 });
 
 // ── Voice preferences (per-author → TTS provider/voice), owned by state.db ─────

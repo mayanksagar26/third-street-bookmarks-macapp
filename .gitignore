@@ -7,6 +7,13 @@ bookmarks.json
 settings.json
 *.log
 
+# Per-source collections (Hacker News, YouTube, Instagram, saved links) and the
+# app-owned state DB. A standalone `node server/index.js` writes these into the
+# repo root, since that is its data directory when Tauri isn't setting one.
+sources/
+state.db
+state.db-journal
+
 .DS_Store
 .vite/
 .gstack/

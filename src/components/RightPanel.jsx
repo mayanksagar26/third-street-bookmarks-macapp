@@ -4,6 +4,26 @@ import { SOURCES, getSource } from '../sources';
 
 const TOOLS = [
   {
+    id: 'add',
+    label: 'Add bookmarks',
+    desc: 'Paste a link, or import an export',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'hn',
+    label: 'Browse Hacker News',
+    desc: 'Today’s stories — save what you want',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M3 3h18v18H3V3zm9.5 10.5L16 7h-1.9l-2.1 4.2L9.9 7H8l3.5 6.5V17h1v-3.5z"/>
+      </svg>
+    ),
+  },
+  {
     id: 'chat',
     label: 'Chat with Bookmarks',
     desc: 'Ask questions using AI',
@@ -75,6 +95,10 @@ export default function RightPanel({
     const count = {};
     const meta = {};
     bookmarks.forEach(b => {
+      // Not every source has an author. A Takeout import is video ids until
+      // enrichment lands, and an Instagram export carries no handle at all —
+      // counting those produced a "@null" row sitting third in the list.
+      if (!b.authorHandle) return;
       count[b.authorHandle] = (count[b.authorHandle] || 0) + 1;
       if (!meta[b.authorHandle]) meta[b.authorHandle] = { name: b.authorName, img: b.authorProfileImageUrl };
     });

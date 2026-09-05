@@ -2,7 +2,8 @@
   "name": "third-street-bookmarks-server",
   "version": "1.0.0",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node --test *.test.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",

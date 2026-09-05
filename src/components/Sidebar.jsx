@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { getSource } from '../sources';
+import { SOURCE_ORDER, getBookmarkSource, SourceIcon } from '../bookmark-sources';
 
 const CAT_DOT_COLORS = {
   technology:'#1d9bf0', tech:'#1d9bf0', ai:'#a855f7',
@@ -26,6 +27,8 @@ export default function Sidebar({
   showUnreadOnly, onToggleUnread,
   catCounts, selectedCategories, onToggleCategory, onClearCategories,
   favMap, favFolders, folderCounts, onRenameFavFolder,
+  sourceCounts = {},
+  sourceFilter, onSourceClick, onSourceAction,
   syncSource,
 }) {
   const [catSearch, setCatSearch] = useState('');
@@ -110,6 +113,71 @@ export default function Sidebar({
           </span>
           <span className="sidebar-badge">{unreadCount}</span>
         </div>
+      </div>
+
+      {/* Sources — where a bookmark came from, not which backend syncs it.
+          "All Bookmarks" above stays deliberately unbranded: the moment a
+          second source exists, an X logo on it is a claim about its contents
+          that isn't true.
+
+          Every source is listed from the first launch. A source you have not
+          filled is greyed rather than hidden — hiding it means never learning
+          it exists — and clicking it opens the place you fill it, because a
+          filter that resolves to nothing is a dead end. */}
+      <div className="sidebar-section">
+        <div className="sidebar-section-title">Sources</div>
+        {SOURCE_ORDER.map(id => {
+          const src = getBookmarkSource(id);
+          const count = sourceCounts[id] || 0;
+          const empty = count === 0;
+          const actionable = empty && Boolean(src.browseLabel);
+          const selected = sourceFilter === id;
+          return (
+            <div
+              key={id}
+              className={
+                `sidebar-item source-item` +
+                (empty ? ' is-empty' : '') +
+                (actionable ? ' is-actionable' : '') +
+                (selected ? ' active' : '')
+              }
+              onClick={() => onSourceClick?.(id)}
+              title={empty ? src.emptyHint : `${count} from ${src.label}`}
+            >
+              <span className="sidebar-item-left">
+                {/* Colour is the signal. An empty source inherits the row's
+                    grey rather than wearing its brand colour. */}
+                <SourceIcon source={id} size={16} style={empty ? undefined : { color: src.accent }} />
+                {src.label}
+              </span>
+              {/* Selected: a way out, so leaving a source doesn't mean hunting
+                  for which other row resets it.
+                  Otherwise: the badge jumps straight to the source's own
+                  surface — "Add" when it holds nothing, "Open" when it does. */}
+              {selected ? (
+                <button
+                  className="sidebar-badge src-action is-clear"
+                  onClick={e => { e.stopPropagation(); onSourceClick?.(id); }}
+                  title={`Stop filtering by ${src.label}`}
+                >
+                  <span className="src-count">{count}</span>
+                  <span className="src-add">✕</span>
+                </button>
+              ) : src.browseLabel ? (
+                <button
+                  className="sidebar-badge src-action"
+                  onClick={e => { e.stopPropagation(); onSourceAction?.(id); }}
+                  title={empty ? src.emptyHint : `Open ${src.browseLabel}`}
+                >
+                  <span className="src-count">{count}</span>
+                  <span className="src-add">{empty ? 'Add' : 'Open'}</span>
+                </button>
+              ) : (
+                <span className="sidebar-badge">{count}</span>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Favourites */}

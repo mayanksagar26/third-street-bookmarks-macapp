@@ -133,6 +133,7 @@ export default function StatsObservations({ bookmarks, onClose }) {
   const topAuthors = useMemo(()=>{
     const a={},m={};
     bookmarks.forEach(b=>{
+      if(!b.authorHandle)return;
       a[b.authorHandle]=(a[b.authorHandle]||0)+1;
       if(!m[b.authorHandle])m[b.authorHandle]={name:b.authorName,img:b.authorProfileImageUrl};
     });
@@ -165,7 +166,7 @@ export default function StatsObservations({ bookmarks, onClose }) {
 
   const misc = useMemo(()=>{
     const avgLen=Math.round(bookmarks.reduce((s,b)=>s+(b.text||'').split(' ').length,0)/(bookmarks.length||1));
-    const uniqueAuthors=new Set(bookmarks.map(b=>b.authorHandle)).size;
+    const uniqueAuthors=new Set(bookmarks.map(b=>b.authorHandle).filter(Boolean)).size;
     const years=[...new Set(bookmarks.map(b=>b.postedAt&&new Date(b.postedAt).getFullYear()).filter(Boolean))];
     const span=years.length?Math.max(...years)-Math.min(...years)+1:0;
     return{avgLen,withLinks:bookmarks.filter(b=>(b.linkCount||0)>0).length,

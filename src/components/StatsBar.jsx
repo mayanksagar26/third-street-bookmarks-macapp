@@ -1,7 +1,7 @@
 function fmt(n) { return Number(n || 0).toLocaleString(); }
 
 export default function StatsBar({ bookmarks }) {
-  const authors = new Set(bookmarks.map(b => b.authorHandle)).size;
+  const authors = new Set(bookmarks.map(b => b.authorHandle).filter(Boolean)).size;
   const dates = bookmarks.map(b => b.postedAt).filter(Boolean).map(d => new Date(d).getFullYear()).filter(y => !isNaN(y));
   const years = dates.length ? Math.max(...dates) - Math.min(...dates) + 1 : 0;
   const cats = new Set(bookmarks.map(b => b.primaryCategory).filter(c => c && c !== 'unclassified')).size;

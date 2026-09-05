@@ -2566,7 +2566,10 @@ kbd {
 
 /* ── Add / import ─────────────────────────────────────────────────────────── */
 
-.add-pane { max-width: 720px; }
+/* No width cap. The pane sits in the same column as the feed and the chat and
+   stats modes, and capping it at 720 left the close button and every block
+   stopping ~200px short of the column's right edge — a gutter wide enough to
+   read as a rendering fault rather than a margin. */
 
 .add-tabs { display: flex; gap: 4px; background: var(--bg-elevated); border-radius: 9px; padding: 3px; margin-bottom: 20px; }
 .add-tab {
@@ -2632,6 +2635,9 @@ kbd {
 
 .add-hint {
   margin-top: 10px;
+  /* The blocks fill the column; the prose inside them does not. A 60-em line is
+     past the point where the eye loses its place returning to the next one. */
+  max-width: 62em;
   color: var(--text-secondary);
   font-size: 12.5px;
   line-height: 1.55;

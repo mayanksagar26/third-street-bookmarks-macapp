@@ -33,7 +33,15 @@ const { spawn } = require('child_process');
  * catches a layout that has been renamed since.
  */
 const PATTERNS = {
-  ig: [['*saved_*.json'], ['*saved*.json']],
+  // Named exactly, not `saved_*`: the same folder holds `saved_music`, which is
+  // a list of audio tracks rather than posts and has no business being kept.
+  // Both extensions, because the download page hands you HTML unless you notice
+  // the format switch — and a real export turned out to be HTML, which the
+  // JSON-only patterns this started with matched none of.
+  ig: [
+    ['*saved_posts.*', '*saved_collections.*'],
+    ['*saved_posts*', '*saved_collections*'],
+  ],
   yt: [['*playlists/*.csv', '*Playlists/*.csv'], ['*.csv']],
 };
 
@@ -100,7 +108,7 @@ async function extractWanted(zipPath, source, destDir, { maxBytes = 64 * 1024 * 
   }
 
   if (!files.length) {
-    throw new Error('No saved-content files in that archive — is it the right export?');
+    throw new Error('No saved_posts or saved_collections file in that archive — is it the Instagram export?');
   }
 
   // A guard rather than an expectation: these files are lists of URLs and

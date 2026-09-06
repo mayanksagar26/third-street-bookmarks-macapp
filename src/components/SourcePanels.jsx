@@ -374,7 +374,8 @@ export function InstagramImport({ onAdded }) {
         <div className="add-hint">
           Instagram has no API for your own saved posts. The official export is the one route
           that cannot get your account flagged, which is why it is the one here. Ask for{' '}
-          <strong>Saved posts</strong> in JSON; it arrives by email, usually within a few hours.
+          <strong>Saved posts</strong> — HTML or JSON, both are read — and it arrives by email,
+          usually within a few hours.
         </div>
         <button
           className="add-btn primary wide"
@@ -392,7 +393,7 @@ export function InstagramImport({ onAdded }) {
       <ExportImporter
         endpoint="/api/import/instagram"
         source="ig"
-        accept={['.json']}
+        accept={['.html', '.json']}
         extLabel="Step 2 — drop in the download"
         placeholder="~/Downloads/instagram-yourname-2026-09-06"
         onImported={onAdded}

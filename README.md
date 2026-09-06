@@ -192,14 +192,21 @@ account as suspicious, and the outcome is a **checkpoint on your account**
 rather than a failed request.
 
 So the app does the manual thing. **Tools → Add bookmarks → Instagram** links
-straight to Instagram's download page; ask for *Saved posts* in JSON. When the
-ZIP arrives, drop it in as it downloaded — no unzipping.
+straight to Instagram's download page; ask for *Saved posts*. When the ZIP
+arrives, drop it in as it downloaded — no unzipping.
 
-**Only the saved-content files come out of it.** An Instagram export is your
-whole account: every photo you have posted, your messages, your login history,
-your ad interests. `unzip` is given a glob and writes only the entries that
-match it, so the rest is never decompressed, let alone stored. A 2.4 MB test
-archive full of photos and messages yields 1.4 KB of URLs.
+Either format is read. The download page hands you **HTML** unless you notice
+the format switch, and Meta's HTML export is a nest of `div.pam` blocks whose
+leaves are label/value tables — parsed as an ordered token stream rather than a
+tree, so it needs no DOM library and survives the class-name churn a
+CSS-selector approach would break on.
+
+**Only `saved_posts` and `saved_collections` come out of it.** An Instagram
+export is your whole account: every photo you have posted, your messages, your
+login history, your ad interests. `unzip` is given a glob and writes only the
+entries that match it, so the rest is never decompressed, let alone stored. A
+real 146 MB export yields 5 MB of two files — and not `saved_music`, which is a
+list of audio tracks rather than posts.
 
 What is kept lands in `~/.tsb/imports/`, beside the collection and the state
 database, so a re-import doesn't send you back through Downloads. Nothing an

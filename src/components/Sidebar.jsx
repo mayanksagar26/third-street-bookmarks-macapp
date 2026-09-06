@@ -26,7 +26,7 @@ export default function Sidebar({
   currentFilter, onFilterChange,
   showUnreadOnly, onToggleUnread,
   catCounts, selectedCategories, onToggleCategory, onClearCategories,
-  favMap, favFolders, folderCounts, onRenameFavFolder,
+  favMap, favFolders, folderCounts, folderSources = {}, onRenameFavFolder,
   sourceCounts = {}, sourceTotals = {},
   sourceFilter, onSourceClick, onSourceAction,
   syncSource,
@@ -303,25 +303,49 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Folders */}
+      {/* Folders — playlists and collections the services own.
+          Deliberately outside the filters above: a folder is a whole thing, so
+          opening one shows all of it rather than the slice left over from
+          whichever source or read state you happened to be looking at. The
+          source mark says where it came from, which the name alone often
+          doesn't — "Job Hunt with Juhi" gives no clue that it is Instagram. */}
       {Object.keys(folderCounts).length > 0 && (
         <div className="sidebar-section">
           <div className="sidebar-section-title">Folders</div>
-          {Object.entries(folderCounts).sort((a, b) => b[1] - a[1]).map(([folder, count]) => (
-            <div
-              key={folder}
-              className={`sidebar-item ${currentFilter === `folder:${folder}` ? 'active' : ''}`}
-              onClick={() => onFilterChange(`folder:${folder}`)}
-            >
-              <span className="sidebar-item-left">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>
-                </svg>
-                {folder}
-              </span>
-              <span className="sidebar-badge">{count}</span>
-            </div>
-          ))}
+          {Object.entries(folderCounts).sort((a, b) => b[1] - a[1]).map(([folder, count]) => {
+            const sources = folderSources[folder] || [];
+            return (
+              <div
+                key={folder}
+                className={`sidebar-item folder-item ${currentFilter === `folder:${folder}` ? 'active' : ''}`}
+                onClick={() => onFilterChange(`folder:${folder}`)}
+                title={sources.length
+                  ? `${count} from ${sources.map(id => getBookmarkSource(id).label).join(' and ')}`
+                  : folder}
+              >
+                <span className="sidebar-item-left">
+                  <span className="folder-marks">
+                    {sources.length
+                      ? sources.map(id => (
+                        <SourceIcon
+                          key={id}
+                          source={id}
+                          size={15}
+                          style={{ color: getBookmarkSource(id).accent }}
+                        />
+                      ))
+                      : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>
+                        </svg>
+                      )}
+                  </span>
+                  <span className="folder-name">{folder}</span>
+                </span>
+                <span className="sidebar-badge">{count}</span>
+              </div>
+            );
+          })}
         </div>
       )}
 

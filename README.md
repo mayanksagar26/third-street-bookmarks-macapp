@@ -217,6 +217,16 @@ with their counts, and only the ones you tick are imported — three collections
 rather than everything you ever tapped save on is the entire point of doing it
 this way.
 
+Captions come through too, so a saved post reads as something rather than as a
+bare link. Thumbnails do not: the export contains no image for a post you saved,
+and Instagram's CDN links expire within days, so a preview would be broken by
+the time you looked at it.
+
+**Check the date range when you request the export.** The default is the last
+year, and a collection you have not added to since then is left out of the
+archive entirely — `start_here.html` inside the export states the window it
+covers. Pick *All time* to get everything.
+
 Both exports are two-phase: the app reads the file, shows you the collections it
 found with their sizes, and imports only the ones you tick. Choosing three
 collections is the entire point of doing it this way.
@@ -228,8 +238,15 @@ and expire within days, so a preview would be broken by the time you read it.
 
 An Instagram collection and a YouTube playlist are the same kind of thing as X's
 bookmark folders: a container the remote service owns. They all land in the
-**Folders** section of the sidebar, kept strictly separate from **Favourites**,
-which are yours. A sync can re-derive a folder; nothing can touch a favourite.
+**Folders** section of the sidebar, each marked with the logo of the service it
+came from — a name like *Job Hunt with Juhi* gives no clue on its own.
+
+Folders sit outside the filters above them. A folder is a whole thing, so
+opening one shows all of it rather than whatever survives the source and read
+state you happened to have set.
+
+They stay strictly separate from **Favourites**, which are yours. A sync can
+re-derive a folder; nothing can touch a favourite.
 
 ---
 

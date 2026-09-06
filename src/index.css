@@ -3038,3 +3038,9 @@ kbd {
 .add-path summary::before { content: '▸ '; }
 .add-path[open] summary::before { content: '▾ '; }
 .add-path summary:hover { color: var(--text-secondary); }
+
+/* ── Folder rows carry their source's mark ─────────────────────────────────── */
+.folder-marks { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.folder-marks svg { flex-shrink: 0; }
+.folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-item.folder-item .sidebar-item-left { min-width: 0; }

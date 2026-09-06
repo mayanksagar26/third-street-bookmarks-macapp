@@ -367,6 +367,18 @@ export default function App() {
     return counts;
   }, [allBookmarks]);
 
+  /** Which source each folder came from, so the sidebar can mark it. */
+  const folderSources = useMemo(() => {
+    const map = {};
+    allBookmarks.forEach(b => {
+      const src = b.source || 'x';
+      (b.folderNames || []).forEach(f => {
+        (map[f] = map[f] || new Set()).add(src);
+      });
+    });
+    return Object.fromEntries(Object.entries(map).map(([f, set]) => [f, [...set]]));
+  }, [allBookmarks]);
+
   /**
    * Source counts follow the read scope.
    *
@@ -627,9 +639,16 @@ export default function App() {
 
   const handleFilterChange = useCallback((filter) => {
     setCurrentFilter(prev => (prev === filter && filter !== 'all') ? 'all' : filter);
-    // 'all' and favourites views show everything (read + unread); favourites are
-    // never hidden by read state.
-    if (filter === 'all' || filter.startsWith('fav:')) setShowUnreadOnly(false);
+    // 'all', favourites and folders show everything in them. A folder is a
+    // whole thing — a playlist, a collection — so opening one and being shown
+    // the slice that survives whichever source and read state happened to be
+    // set is not what the click asked for.
+    if (filter === 'all' || filter.startsWith('fav:') || filter.startsWith('folder:')) {
+      setShowUnreadOnly(false);
+    }
+    // Same reasoning for the source: a folder belongs to one already, and
+    // intersecting it with a different one shows an empty feed.
+    if (filter.startsWith('folder:')) { setSourceFilter(null); setSourceFolder(null); }
     // Picking anything in the sidebar is a request to look at the feed. Leaving
     // a tool pane covering it meant the click appeared to do nothing at all.
     // The source filter deliberately survives: "All Bookmarks" answers read-or-
@@ -736,6 +755,7 @@ export default function App() {
         favMap={favMap}
         favFolders={favFolders}
         folderCounts={folderCounts}
+        folderSources={folderSources}
         sourceCounts={sourceCounts}
         sourceTotals={sourceTotals}
         sourceFilter={sourceFilter}

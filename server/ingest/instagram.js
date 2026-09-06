@@ -149,12 +149,21 @@ function parseHtml(file, isCollectionFile) {
       // anchor's text. Only the first opens a new item.
       if (pending && pending.shortcode === code) continue;
       flush();
-      pending = { shortcode: code, url: t.value, timestamp: null, collection, author: null };
+      pending = {
+        shortcode: code, url: t.value, timestamp: null, collection,
+        author: null, authorName: null, caption: null,
+      };
       continue;
     }
 
-    // The owner's handle follows the item's links, so it attaches backwards.
-    if (t.kind === 'Username' && pending && !pending.author) pending.author = t.value || null;
+    // Caption, owner name and handle all follow the item's links, so they
+    // attach backwards to the item still open. Each is taken once: Instagram
+    // repeats the caption for posts with several images, and the second copy
+    // would otherwise overwrite the first with the same text for no reason.
+    if (!pending) continue;
+    if (t.kind === 'Caption'  && !pending.caption)    pending.caption    = t.value || null;
+    if (t.kind === 'Name'     && !pending.authorName) pending.authorName = t.value || null;
+    if (t.kind === 'Username' && !pending.author)     pending.author     = t.value || null;
   }
   flush();
   return out;
@@ -230,6 +239,8 @@ function parseFile(file) {
         timestamp: read.timestamp,
         collection: isCollection ? read.title : null,
         author: isCollection ? null : read.title,
+        authorName: null,
+        caption: null,
       });
     }
   }
@@ -246,12 +257,14 @@ function toRecord(item) {
     source: 'ig',
     sourceLabel: 'Instagram',
     url,
-    title: item.collection ? `Saved to ${item.collection}` : 'Instagram post',
-    // The export carries no caption. Saying so beats an empty card that looks
-    // like a failed import.
-    text: '',
+    // The caption is the content, so it goes in the body and the card gets no
+    // separate heading — a title reading "Instagram post" above the actual post
+    // is a row of furniture. Without a caption the URL becomes the heading, so
+    // the card still says something.
+    title: null,
+    text: item.caption || '',
     authorHandle: item.author || null,
-    authorName: item.author || null,
+    authorName: item.authorName || item.author || null,
     authorProfileImageUrl: null,
     // Instagram's CDN thumbnail URLs are signed and expire within days, so the
     // export's image links are worthless by the time you read them. No preview
@@ -293,9 +306,16 @@ function readExport(target, { only = null } = {}) {
       const prev = byShortcode.get(item.shortcode);
       // A post can appear in the flat saved list and in a collection. The
       // collection membership is the more useful of the two, so it wins.
-      if (!prev) byShortcode.set(item.shortcode, item);
-      else if (!prev.collection && item.collection) byShortcode.set(item.shortcode, { ...prev, ...item });
-      else if (!prev.author && item.author) prev.author = item.author;
+      if (!prev) { byShortcode.set(item.shortcode, item); continue; }
+      // A post can appear in the flat saved list and in a collection. Take the
+      // collection membership from whichever copy has it, and fill in any
+      // detail the other copy was missing rather than letting a sparser record
+      // overwrite a fuller one.
+      if (!prev.collection && item.collection) prev.collection = item.collection;
+      if (!prev.author && item.author) prev.author = item.author;
+      if (!prev.authorName && item.authorName) prev.authorName = item.authorName;
+      if (!prev.caption && item.caption) prev.caption = item.caption;
+      if (!prev.timestamp && item.timestamp) prev.timestamp = item.timestamp;
     }
   }
 

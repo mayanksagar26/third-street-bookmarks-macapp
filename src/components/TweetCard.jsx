@@ -211,9 +211,13 @@ export default function TweetCard({
           ) : (
             <span className="tweet-name">{name || src.label}</span>
           )}
+          {/* Prefer the handle over the domain when we have one: "@sou.tospeak"
+              says who posted it, where "instagram.com" only repeats the badge
+              two inches to its right. Falls back to the domain for sources that
+              have no such thing, like a saved link. */}
           {handle && (isX
             ? <a className="tweet-handle" href={profileUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>@{handle}</a>
-            : <span className="tweet-handle">{b.domain || src.label}</span>
+            : <span className="tweet-handle">{handle !== name ? `@${handle}` : (b.domain || src.label)}</span>
           )}
           {!isX && (
             <span className="src-badge" style={{ color: src.accent, borderColor: `${src.accent}44` }} title={`Saved from ${src.label}`}>

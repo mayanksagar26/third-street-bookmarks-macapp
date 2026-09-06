@@ -367,12 +367,26 @@ export default function App() {
     return counts;
   }, [allBookmarks]);
 
-  /** The sources present in what is currently displayed, for the sort bar. */
+  /**
+   * Which sources the sort bar should describe.
+   *
+   * Inferring this from what is on screen breaks the moment the screen is
+   * empty. A Hacker News view with everything read, or an Instagram source with
+   * nothing imported yet, produced no rows to inspect — and an empty list was
+   * read as "no idea, offer everything", which put Most Bookmarked and Most
+   * Reposted back in front of exactly the sources that have neither.
+   *
+   * So an explicit choice wins over an inferred one: an Instagram view is an
+   * Instagram view whether or not it currently contains anything. Only when
+   * nothing is selected does this fall back to inspecting the rows, and then to
+   * the whole collection rather than to every source that could ever exist.
+   */
   const visibleSources = useMemo(() => {
-    const set = new Set();
-    for (const b of filtered) set.add(b.source || 'x');
-    return [...set];
-  }, [filtered]);
+    if (sourceFilter) return [sourceFilter];
+    if (folderPick) return [folderPick.source];
+    const from = (list) => [...new Set(list.map(b => b.source || 'x'))];
+    return filtered.length ? from(filtered) : from(allBookmarks);
+  }, [filtered, allBookmarks, sourceFilter, folderPick]);
 
   // If the active sort stops being offered — you were on "Most Reposted" and
   // then opened Hacker News — fall back rather than leaving the bar with

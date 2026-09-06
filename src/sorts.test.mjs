@@ -48,8 +48,21 @@ test('a mixed feed offers the union, in a stable order', () => {
   assert.deepEqual(k, ['newest', 'oldest', 'likes', 'bookmarks', 'reposts', 'replies', 'author']);
 });
 
-test('no source selected still yields something usable', () => {
-  assert.ok(keys([]).length >= 3);
+test('no sources at all is an empty collection, not every source', () => {
+  // The bug this replaced: an empty list meant "no idea, offer everything", so
+  // a Hacker News view with nothing unread, and an Instagram source with
+  // nothing imported, both got Most Bookmarked and Most Reposted back.
+  assert.deepEqual(keys([]), ['newest', 'oldest', 'author']);
+  assert.ok(!keys([]).includes('bookmarks'));
+  assert.ok(!keys([]).includes('reposts'));
+});
+
+test('a source with nothing in it still describes itself', () => {
+  // The view decides this, not the rows: an Instagram view is an Instagram view
+  // whether or not it currently contains anything.
+  assert.deepEqual(keys(['ig']), ['newest', 'oldest', 'author']);
+  assert.deepEqual(keys(['hn']), ['newest', 'oldest', 'likes', 'replies', 'author']);
+  assert.ok(labels(['hn']).includes('Most Points'));
 });
 
 // ── Card metrics ─────────────────────────────────────────────────────────────

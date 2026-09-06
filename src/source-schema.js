@@ -70,7 +70,12 @@ function schemaFor(id) {
  * that appears to be broken.
  */
 export function sortsForSources(sourceIds) {
-  const ids = sourceIds.length ? sourceIds : Object.keys(SOURCE_SCHEMA);
+  // No sources at all means an empty collection, not "every source that could
+  // ever exist". Answering the second offers Most Bookmarked over nothing.
+  if (!sourceIds.length) {
+    return ['newest', 'oldest', 'author'].map(key => ({ key, label: SORT_DEFS[key] }));
+  }
+  const ids = sourceIds;
   const keys = new Set();
   for (const id of ids) for (const k of (schemaFor(id).sorts || [])) keys.add(k);
   const order = Object.keys(SORT_DEFS);

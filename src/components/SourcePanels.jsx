@@ -32,6 +32,8 @@ export function ExportImporter({ endpoint, source, accept, extLabel, placeholder
   // Where the files being read came from. An upload lives in the app's own
   // directory, so the server addresses it rather than trusting a path.
   const [uploaded, setUploaded] = useState(null);
+  // What the archive step is doing, since it is the slow one.
+  const [stage, setStage] = useState(null);
   const fileRef = useRef(null);
 
   async function post(body) {
@@ -54,34 +56,57 @@ export function ExportImporter({ endpoint, source, accept, extLabel, placeholder
   }
 
   /**
-   * Read the picked files in the browser and hand their text to the server.
+   * Take whatever was picked: the archive as downloaded, or loose files from an
+   * export somebody already unzipped.
    *
-   * The webview cannot give a real filesystem path for a chosen file, and the
-   * import needs the contents anyway — so they are read here and written into
-   * the app's data directory, which is also what makes the export re-readable
-   * later without asking you to find it again.
+   * The archive is the path worth optimising for, because it is what the
+   * platform actually hands you. It is sent whole and the server keeps only the
+   * saved-content entries out of it — an Instagram export is the entire account,
+   * and none of the photos or messages are ever written to disk.
    */
   async function upload(fileList) {
-    const files = [...(fileList || [])].filter(f => accept.some(ext => f.name.toLowerCase().endsWith(ext)));
-    if (!files.length) {
-      setResult({ error: `Pick the ${accept.join(' or ')} files from the unzipped export.` });
+    const all = [...(fileList || [])];
+    const zip = all.find(f => /\.zip$/i.test(f.name));
+    const loose = all.filter(f => accept.some(ext => f.name.toLowerCase().endsWith(ext)));
+
+    if (!zip && !loose.length) {
+      setResult({ error: `Pick the .zip you downloaded, or the ${accept.join(' / ')} files from it.` });
       return;
     }
+
     setBusy(true); setResult(null); setColl(null);
+    setStage(zip ? `Reading ${zip.name}…` : 'Reading files…');
     try {
-      const payload = await Promise.all(files.map(async f => ({ name: f.name, content: await f.text() })));
-      const r = await fetch('/api/import/upload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source, files: payload }),
-      });
-      const up = await r.json();
-      if (!r.ok) throw new Error(up.error || 'upload failed');
+      let up;
+      if (zip) {
+        // Streamed as the raw body: these run to gigabytes, and base64 inside
+        // JSON would inflate that by a third before anything could read it.
+        const r = await fetch(`/api/import/upload-zip?source=${encodeURIComponent(source)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/zip' },
+          body: zip,
+        });
+        up = await r.json();
+        if (!r.ok) throw new Error(up.error || 'could not read that archive');
+        setStage(`Kept ${up.files.length} file${up.files.length === 1 ? '' : 's'} out of the archive.`);
+      } else {
+        const payload = await Promise.all(loose.map(async f => ({ name: f.name, content: await f.text() })));
+        const r = await fetch('/api/import/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, files: payload }),
+        });
+        up = await r.json();
+        if (!r.ok) throw new Error(up.error || 'upload failed');
+        setStage(null);
+      }
       setUploaded(up.dir);
       setPath('');
       await preview({ uploaded: true });
-    } catch (e) { setResult({ error: e.message }); }
-    finally { setBusy(false); }
+    } catch (e) {
+      setResult({ error: e.message });
+      setStage(null);
+    } finally { setBusy(false); }
   }
 
   async function scan() {
@@ -131,16 +156,23 @@ export function ExportImporter({ endpoint, source, accept, extLabel, placeholder
           ref={fileRef}
           type="file"
           multiple
-          accept={accept.join(',')}
+          accept={[...accept, '.zip'].join(',')}
           hidden
           onChange={e => { upload(e.target.files); e.target.value = ''; }}
         />
-        <strong>Choose files</strong> or drop them here
-        <span>{accept.join(' / ')} from the unzipped export</span>
+        <strong>{busy ? (stage || 'Working…') : 'Choose the .zip you downloaded'}</strong>
+        <span>
+          {busy ? 'Only the saved-content files are kept.'
+                : `or drop it here — already unzipped? the ${accept.join(' / ')} files work too`}
+        </span>
       </div>
 
-      {uploaded && (
-        <div className="add-hint">Saved into the app’s own folder, so you won’t have to find them again.</div>
+      {uploaded && !busy && (
+        <div className="add-hint">
+          {stage ? `${stage} ` : ''}
+          Kept in the app’s own folder, so you won’t have to find the export again.
+          The rest of the archive was never written to disk.
+        </div>
       )}
 
       <details className="add-path">
@@ -308,7 +340,7 @@ export function YouTubeImport({ onAdded }) {
         endpoint="/api/import/youtube"
         source="yt"
         accept={['.csv']}
-        extLabel="Google Takeout — playlists, Liked, Watch Later"
+        extLabel="Google Takeout — drop in the download"
         placeholder="~/Downloads/Takeout/YouTube and YouTube Music"
         onImported={onAdded}
       />
@@ -361,14 +393,16 @@ export function InstagramImport({ onAdded }) {
         endpoint="/api/import/instagram"
         source="ig"
         accept={['.json']}
-        extLabel="Step 2 — import the unzipped export"
-        placeholder="~/Downloads/instagram-yourname-2026-09-05"
+        extLabel="Step 2 — drop in the download"
+        placeholder="~/Downloads/instagram-yourname-2026-09-06"
         onImported={onAdded}
       />
       <div className="add-hint" style={{ marginTop: -6 }}>
-        Your collections come through as folders. The export carries no captions or images —
-        Instagram’s thumbnail links expire within days, so a preview here would be broken by
-        the time you read it.
+        The archive is your whole account — photos, messages, ad data. Only the saved-content
+        files are taken out of it; nothing else is ever written to disk. Your collections come
+        through as folders, and you choose which ones to keep. The export carries no captions
+        or images, because Instagram’s thumbnail links expire within days and a preview here
+        would be broken by the time you read it.
       </div>
     </>
   );

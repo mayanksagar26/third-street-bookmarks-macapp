@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { detectRuntimes, findBinary } = require('./agents');
 const { discover } = require('./discover');
@@ -11,6 +12,7 @@ const hn = require('./ingest/hn');
 const yt = require('./ingest/youtube');
 const ytTakeout = require('./ingest/youtube-takeout');
 const instagram = require('./ingest/instagram');
+const { extractWanted } = require('./ingest/zip');
 const linkIngest = require('./ingest/link');
 const {
   createCors,
@@ -761,6 +763,77 @@ const UPLOAD_KINDS = {
 };
 const UPLOAD_MAX_FILES = 60;
 const UPLOAD_MAX_BYTES = 32 * 1024 * 1024;
+// Archives are the whole account, so the ceiling is about refusing a runaway
+// stream rather than about any export being expected to approach it.
+const ZIP_MAX_BYTES = 4 * 1024 * 1024 * 1024;
+
+/**
+ * Take the archive itself, and keep only the part this app is for.
+ *
+ * An Instagram export is the whole account — every photo, every message, your
+ * login history. Asking you to unzip it and go find two JSON files is asking
+ * you to do the computer's job; storing the unzipped result would make the
+ * app's data directory a copy of your Instagram account.
+ *
+ * So the archive streams to a temporary file, `unzip` pulls out only the
+ * entries matching this source's patterns, and the temporary file is deleted
+ * before the response is written. What is kept is a few hundred kilobytes of
+ * URLs. Nothing else is ever decompressed.
+ *
+ * The body is piped rather than buffered: these archives run to gigabytes, and
+ * `express.raw` would hold the whole thing in memory to hand us a Buffer we
+ * would only write straight to disk.
+ */
+app.post('/api/import/upload-zip', (req, res) => {
+  const source = String(req.query?.source || '');
+  if (!UPLOAD_KINDS[source]) return res.status(400).json({ error: 'Unknown import source' });
+
+  const importsRoot = path.join(DATA_DIR, 'imports');
+  fs.mkdirSync(importsRoot, { recursive: true });
+  const tmp = path.join(importsRoot, `.upload-${crypto.randomBytes(8).toString('hex')}.zip`);
+  const dest = path.join(importsRoot, source);
+
+  const cleanup = () => { try { fs.rmSync(tmp, { force: true }); } catch {} };
+
+  const out = fs.createWriteStream(tmp);
+  let bytes = 0;
+  let aborted = false;
+
+  req.on('data', chunk => {
+    bytes += chunk.length;
+    if (bytes > ZIP_MAX_BYTES && !aborted) {
+      aborted = true;
+      out.destroy();
+      cleanup();
+      res.status(413).json({ error: 'That archive is larger than 4 GB' });
+      req.destroy();
+    }
+  });
+
+  req.on('aborted', () => { aborted = true; out.destroy(); cleanup(); });
+
+  req.pipe(out);
+
+  out.on('error', () => {
+    if (aborted) return;
+    aborted = true;
+    cleanup();
+    if (!res.headersSent) res.status(500).json({ error: 'Could not save the upload' });
+  });
+
+  out.on('finish', async () => {
+    if (aborted) return;
+    try {
+      if (!bytes) throw new Error('Nothing was uploaded');
+      const { files, bytes: kept } = await extractWanted(tmp, source, dest);
+      cleanup();
+      res.json({ ok: true, dir: dest, files, kept, archiveBytes: bytes });
+    } catch (e) {
+      cleanup();
+      if (!res.headersSent) res.status(400).json({ error: e.message });
+    }
+  });
+});
 
 app.post('/api/import/upload', (req, res) => {
   const source = String(req.body?.source || '');

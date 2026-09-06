@@ -193,13 +193,22 @@ rather than a failed request.
 
 So the app does the manual thing. **Tools → Add bookmarks → Instagram** links
 straight to Instagram's download page; ask for *Saved posts* in JSON. When the
-ZIP arrives, drop the unzipped `saved_*.json` files onto step 2 — or point it at
-the folder if you'd rather type a path.
+ZIP arrives, drop it in as it downloaded — no unzipping.
 
-Files you drop are copied into `~/.tsb/imports/`, alongside the collection and
-the state database. They stay there, so a re-import doesn't send you looking
-through Downloads again, and nothing an import writes lands anywhere a
-`git status` would notice.
+**Only the saved-content files come out of it.** An Instagram export is your
+whole account: every photo you have posted, your messages, your login history,
+your ad interests. `unzip` is given a glob and writes only the entries that
+match it, so the rest is never decompressed, let alone stored. A 2.4 MB test
+archive full of photos and messages yields 1.4 KB of URLs.
+
+What is kept lands in `~/.tsb/imports/`, beside the collection and the state
+database, so a re-import doesn't send you back through Downloads. Nothing an
+import writes goes anywhere a `git status` would notice.
+
+Then you pick. The collections you made on Instagram come through as folders
+with their counts, and only the ones you tick are imported — three collections
+rather than everything you ever tapped save on is the entire point of doing it
+this way.
 
 Both exports are two-phase: the app reads the file, shows you the collections it
 found with their sizes, and imports only the ones you tick. Choosing three

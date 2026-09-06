@@ -21,6 +21,8 @@ const instagram = require('./ingest/instagram');
 const { canonical } = require('./ingest/link');
 const { buildAgentArgs, CLAUDE_DENIED_TOOLS } = require('./agent-run');
 const { safeUploadName } = require('./security');
+const { extractWanted } = require('./ingest/zip');
+const { execFileSync } = require('child_process');
 
 function tmpdir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-test-'));
@@ -359,4 +361,116 @@ test('empty and dot names are refused', () => {
   for (const bad of ['', null, undefined, '.', '..', '   ']) {
     assert.throws(() => safeUploadName(bad, ['.json']));
   }
+});
+
+
+// ── Extracting a platform archive ────────────────────────────────────────────
+//
+// An Instagram export is the whole account. These tests are about what does
+// *not* come out of it: the photos, the messages, and anything an archive
+// claims lives outside the destination directory.
+
+/** Build a zip from a {path: contents} map, using the `zip` that ships with macOS. */
+function makeZip(entries) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-zip-'));
+  const build = path.join(root, 'build');
+  for (const [rel, body] of Object.entries(entries)) {
+    const full = path.join(build, rel);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, body);
+  }
+  const zipPath = path.join(root, 'export.zip');
+  execFileSync('zip', ['-qr', zipPath, '.'], { cwd: build });
+  return zipPath;
+}
+
+const IG_ARCHIVE = {
+  'your_instagram_activity/saved/saved_posts.json':
+    '{"saved_saved_media":[{"title":"naval","string_map_data":{"Saved on":{"href":"https://www.instagram.com/p/AAA111/","timestamp":1717000000}}}]}',
+  'your_instagram_activity/saved/saved_collections.json':
+    '{"saved_saved_collections":[{"title":"Design Refs","string_map_data":{"Photo":{"href":"https://www.instagram.com/p/AAA111/"},"Added Time":{"timestamp":1717300000}}}]}',
+  'media/posts/photo1.jpg': 'BINARYPHOTODATA',
+  'media/posts/photo2.jpg': 'MOREPHOTODATA',
+  'messages/inbox/thread.json': '{"messages":["private"]}',
+  'ads_information/interests.json': '{"ads":["interest data"]}',
+  'personal_information/profile.json': '{"email":"me@example.com"}',
+};
+
+test('only the saved-content files come out of a full account archive', async () => {
+  const zip = makeZip(IG_ARCHIVE);
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  const { files } = await extractWanted(zip, 'ig', dest);
+  assert.deepEqual(files.sort(), ['saved_collections.json', 'saved_posts.json']);
+});
+
+test('photos, messages and profile data are never written to disk', async () => {
+  const zip = makeZip(IG_ARCHIVE);
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  await extractWanted(zip, 'ig', dest);
+  const written = fs.readdirSync(dest);
+  for (const leak of ['photo1.jpg', 'photo2.jpg', 'thread.json', 'interests.json', 'profile.json']) {
+    assert.ok(!written.includes(leak), `${leak} should never be extracted`);
+  }
+  assert.equal(written.length, 2, 'nothing beyond the two saved files');
+});
+
+test('an archive entry cannot escape the destination', async () => {
+  // Zip-slip. The traversal has to be written as a literal entry *name* inside
+  // the archive — creating it through the filesystem would escape the build
+  // directory during setup and never reach the zip at all, which is the trap
+  // the first version of this test fell into.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-slip-'));
+  const zip = path.join(root, 'evil.zip');
+  // Named to match the extraction pattern, so this exercises the flattening
+  // rather than just being skipped for not matching.
+  const marker = path.join(root, 'saved_ESCAPED.json');
+  execFileSync('python3', ['-c', [
+    'import zipfile,sys',
+    'z=zipfile.ZipFile(sys.argv[1],"w")',
+    'z.writestr("saved_posts.json",\'{"saved_saved_media":[]}\')',
+    'z.writestr(sys.argv[2],"{}")',
+    'z.close()',
+  ].join('\n'), zip, `../../../../../../../..${marker}`]);
+
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  await extractWanted(zip, 'ig', dest);
+
+  assert.ok(!fs.existsSync(marker), 'nothing was written outside the destination');
+  assert.ok(fs.readdirSync(dest).includes('saved_ESCAPED.json'),
+    'the traversal was flattened into the destination rather than followed');
+});
+
+test('an archive with nothing relevant is refused rather than half-imported', async () => {
+  const zip = makeZip({ 'readme.txt': 'hello', 'media/photo.jpg': 'data' });
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  await assert.rejects(() => extractWanted(zip, 'ig', dest), /No saved-content files/);
+});
+
+test('a file that is not a zip fails without leaking the temp path', async () => {
+  const notZip = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-nz-')), 'x.zip');
+  fs.writeFileSync(notZip, 'this is not a zip archive');
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  await assert.rejects(
+    () => extractWanted(notZip, 'ig', dest),
+    (e) => /not a zip archive/.test(e.message) && !/\/tmp|\.upload-/.test(e.message),
+  );
+});
+
+test('a second archive replaces the first rather than merging into it', async () => {
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  await extractWanted(makeZip(IG_ARCHIVE), 'ig', dest);
+  await extractWanted(makeZip({ 'saved_posts.json': '{"saved_saved_media":[]}' }), 'ig', dest);
+  assert.deepEqual(fs.readdirSync(dest), ['saved_posts.json'],
+    'the previous export’s collections file is gone, not left behind');
+});
+
+test('Takeout playlists are pulled from a YouTube archive', async () => {
+  const zip = makeZip({
+    'Takeout/YouTube and YouTube Music/playlists/Watch later-videos.csv': 'Video ID\ndQw4w9WgXcQ\n',
+    'Takeout/YouTube and YouTube Music/videos/myvideo.mp4': 'VIDEODATA',
+    'Takeout/archive_browser.html': '<html></html>',
+  });
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  const { files } = await extractWanted(zip, 'yt', dest);
+  assert.deepEqual(files, ['Watch later-videos.csv']);
 });

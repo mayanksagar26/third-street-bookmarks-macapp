@@ -20,6 +20,7 @@ const ytTakeout = require('./ingest/youtube-takeout');
 const instagram = require('./ingest/instagram');
 const { canonical } = require('./ingest/link');
 const { buildAgentArgs, CLAUDE_DENIED_TOOLS } = require('./agent-run');
+const { safeUploadName } = require('./security');
 
 function tmpdir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-test-'));
@@ -314,4 +315,48 @@ test('codex stays read-only regardless of the web flag', () => {
   const web = buildAgentArgs('codex', 'hi', { web: true });
   assert.deepEqual(plain, web);
   assert.ok(plain.includes('read-only'));
+});
+
+
+// ── Uploaded export file names ───────────────────────────────────────────────
+//
+// This route writes files to disk from a name the browser supplied, so the
+// sanitiser is the only thing standing between an upload and an arbitrary
+// write. Everything it rejects, it must reject by refusing rather than by
+// rewriting — a rewritten name is a name someone can still steer.
+
+test('a bare name with the right extension passes through', () => {
+  assert.equal(safeUploadName('saved_posts.json', ['.json']), 'saved_posts.json');
+  assert.equal(safeUploadName('Watch later-videos.csv', ['.csv']), 'Watch later-videos.csv');
+});
+
+test('traversal cannot escape the import directory', () => {
+  assert.equal(safeUploadName('../../../.ssh/authorized_keys.json', ['.json']), 'authorized_keys.json');
+  assert.equal(safeUploadName('..\\..\\windows\\evil.json', ['.json']), 'evil.json');
+});
+
+test('an absolute path is reduced to its basename', () => {
+  assert.equal(safeUploadName('/etc/passwd.json', ['.json']), 'passwd.json');
+});
+
+test('a webkitdirectory relative path keeps only the file', () => {
+  assert.equal(safeUploadName('Takeout/YouTube/playlists/Likes.csv', ['.csv']), 'Likes.csv');
+});
+
+test('the wrong extension is refused, not corrected', () => {
+  assert.throws(() => safeUploadName('payload.sh', ['.json']), /not a \.json file/);
+  assert.throws(() => safeUploadName('notes.csv', ['.json']), /not a \.json file/);
+  assert.throws(() => safeUploadName('noextension', ['.json']));
+});
+
+test('shell metacharacters in a name are refused', () => {
+  assert.throws(() => safeUploadName('a;rm -rf ~.json', ['.json']), /Unusual file name/);
+  assert.throws(() => safeUploadName('$(whoami).json', ['.json']), /Unusual file name/);
+  assert.throws(() => safeUploadName('a`id`.json', ['.json']), /Unusual file name/);
+});
+
+test('empty and dot names are refused', () => {
+  for (const bad of ['', null, undefined, '.', '..', '   ']) {
+    assert.throws(() => safeUploadName(bad, ['.json']));
+  }
 });

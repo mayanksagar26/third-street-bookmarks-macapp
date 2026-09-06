@@ -3002,3 +3002,39 @@ kbd {
   border-left: 2px solid var(--border-strong);
   color: var(--text-secondary);
 }
+
+/* ── Choosing an export instead of typing where it lives ───────────────────── */
+
+.add-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 22px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 11px;
+  background: var(--bg-solid);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.add-drop:hover, .add-drop.over { border-color: var(--accent); background: rgba(55, 180, 255, 0.06); }
+.add-drop strong { color: var(--accent); font-weight: 650; }
+.add-drop span { color: var(--text-tertiary); font-size: 12px; }
+.add-drop.is-busy { opacity: 0.6; cursor: default; }
+
+/* The path field is the fallback, so it starts folded rather than competing
+   with the picker for the same job. */
+.add-path { margin-top: 12px; }
+.add-path summary {
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 12.5px;
+  list-style: none;
+}
+.add-path summary::-webkit-details-marker { display: none; }
+.add-path summary::before { content: '▸ '; }
+.add-path[open] summary::before { content: '▾ '; }
+.add-path summary:hover { color: var(--text-secondary); }

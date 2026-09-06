@@ -193,7 +193,13 @@ rather than a failed request.
 
 So the app does the manual thing. **Tools → Add bookmarks → Instagram** links
 straight to Instagram's download page; ask for *Saved posts* in JSON. When the
-ZIP arrives, point step 2 at the unzipped folder.
+ZIP arrives, drop the unzipped `saved_*.json` files onto step 2 — or point it at
+the folder if you'd rather type a path.
+
+Files you drop are copied into `~/.tsb/imports/`, alongside the collection and
+the state database. They stay there, so a re-import doesn't send you looking
+through Downloads again, and nothing an import writes lands anywhere a
+`git status` would notice.
 
 Both exports are two-phase: the app reads the file, shows you the collections it
 found with their sizes, and imports only the ones you tick. Choosing three
@@ -234,6 +240,7 @@ which are yours. A sync can re-derive a folder; nothing can touch a favourite.
               ├── state.db       read · fav · label · note
               ├── bookmarks.json X, owned by Field Theory
               ├── sources/       hn · yt · ig · link, owned by this app
+              ├── imports/       exports you uploaded, kept for re-import
               ├── settings.json
               └── server.log
 ```

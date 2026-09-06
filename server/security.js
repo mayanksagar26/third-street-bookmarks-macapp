@@ -248,12 +248,31 @@ function validateImportPath(input, { extensions = ['.json'], allowDir = false } 
   return resolved;
 }
 
+/**
+ * Reduce a browser-supplied file name to something safe to join onto a path.
+ *
+ * `File.name` is usually a bare name, but `webkitdirectory` sends a relative
+ * path and nothing stops a caller posting whatever it likes to the endpoint.
+ * Taking the basename and refusing anything unusual is shorter and more
+ * auditable than trying to sanitise traversal out of a string — `..` and a
+ * leading `/` both simply cease to exist rather than being rewritten.
+ */
+function safeUploadName(name, allowedExt) {
+  const base = path.basename(String(name || '').replace(/\\/g, '/'));
+  if (!base || base === '.' || base === '..') throw new Error('Bad file name');
+  if (!/^[A-Za-z0-9._ -]{1,120}$/.test(base)) throw new Error(`Unusual file name: ${base}`);
+  const ext = path.extname(base).toLowerCase();
+  if (!allowedExt.includes(ext)) throw new Error(`${base} is not a ${allowedExt.join(' or ')} file`);
+  return base;
+}
+
 module.exports = {
   ALLOWED_ORIGINS,
   createCors,
   createGuard,
   resolveToken,
   securityHeaders,
+  safeUploadName,
   validateBookmarkPath,
   validateImportPath,
   validatePrompt,

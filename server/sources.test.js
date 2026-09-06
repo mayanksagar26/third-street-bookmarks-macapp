@@ -21,6 +21,8 @@ const instagram = require('./ingest/instagram');
 const { canonical } = require('./ingest/link');
 const { buildAgentArgs, CLAUDE_DENIED_TOOLS } = require('./agent-run');
 const { safeUploadName } = require('./security');
+const { extractWanted } = require('./ingest/zip');
+const { execFileSync } = require('child_process');
 
 function tmpdir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-test-'));
@@ -359,4 +361,229 @@ test('empty and dot names are refused', () => {
   for (const bad of ['', null, undefined, '.', '..', '   ']) {
     assert.throws(() => safeUploadName(bad, ['.json']));
   }
+});
+
+
+// ── Extracting a platform archive ────────────────────────────────────────────
+//
+// An Instagram export is the whole account. These tests are about what does
+// *not* come out of it: the photos, the messages, and anything an archive
+// claims lives outside the destination directory.
+
+/** Build a zip from a {path: contents} map, using the `zip` that ships with macOS. */
+function makeZip(entries) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-zip-'));
+  const build = path.join(root, 'build');
+  for (const [rel, body] of Object.entries(entries)) {
+    const full = path.join(build, rel);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, body);
+  }
+  const zipPath = path.join(root, 'export.zip');
+  execFileSync('zip', ['-qr', zipPath, '.'], { cwd: build });
+  return zipPath;
+}
+
+const IG_ARCHIVE = {
+  'your_instagram_activity/saved/saved_posts.json':
+    '{"saved_saved_media":[{"title":"naval","string_map_data":{"Saved on":{"href":"https://www.instagram.com/p/AAA111/","timestamp":1717000000}}}]}',
+  'your_instagram_activity/saved/saved_collections.json':
+    '{"saved_saved_collections":[{"title":"Design Refs","string_map_data":{"Photo":{"href":"https://www.instagram.com/p/AAA111/"},"Added Time":{"timestamp":1717300000}}}]}',
+  'media/posts/photo1.jpg': 'BINARYPHOTODATA',
+  'media/posts/photo2.jpg': 'MOREPHOTODATA',
+  'messages/inbox/thread.json': '{"messages":["private"]}',
+  'ads_information/interests.json': '{"ads":["interest data"]}',
+  'personal_information/profile.json': '{"email":"me@example.com"}',
+};
+
+test('only the saved-content files come out of a full account archive', async () => {
+  const zip = makeZip(IG_ARCHIVE);
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  const { files } = await extractWanted(zip, 'ig', dest);
+  assert.deepEqual(files.sort(), ['saved_collections.json', 'saved_posts.json']);
+});
+
+test('photos, messages and profile data are never written to disk', async () => {
+  const zip = makeZip(IG_ARCHIVE);
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  await extractWanted(zip, 'ig', dest);
+  const written = fs.readdirSync(dest);
+  for (const leak of ['photo1.jpg', 'photo2.jpg', 'thread.json', 'interests.json', 'profile.json']) {
+    assert.ok(!written.includes(leak), `${leak} should never be extracted`);
+  }
+  assert.equal(written.length, 2, 'nothing beyond the two saved files');
+});
+
+test('an archive entry cannot escape the destination', async () => {
+  // Zip-slip. The traversal has to be written as a literal entry *name* inside
+  // the archive — creating it through the filesystem would escape the build
+  // directory during setup and never reach the zip at all, which is the trap
+  // the first version of this test fell into.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-slip-'));
+  const zip = path.join(root, 'evil.zip');
+  // Named to match the extraction pattern, so this exercises the flattening
+  // rather than just being skipped for not matching.
+  const marker = path.join(root, 'saved_collections.json');
+  execFileSync('python3', ['-c', [
+    'import zipfile,sys',
+    'z=zipfile.ZipFile(sys.argv[1],"w")',
+    'z.writestr("keep_saved_posts.json",\'{"saved_saved_media":[]}\')',
+    'z.writestr(sys.argv[2],"{}")',
+    'z.close()',
+  ].join('\n'), zip, `../../../../../../../..${marker}`]);
+
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  await extractWanted(zip, 'ig', dest);
+
+  assert.ok(!fs.existsSync(marker), 'nothing was written outside the destination');
+  assert.ok(fs.readdirSync(dest).includes('saved_collections.json'),
+    'the traversal was flattened into the destination rather than followed');
+});
+
+test('an archive with nothing relevant is refused rather than half-imported', async () => {
+  const zip = makeZip({ 'readme.txt': 'hello', 'media/photo.jpg': 'data' });
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  await assert.rejects(() => extractWanted(zip, 'ig', dest), /No saved_posts or saved_collections/);
+});
+
+test('a file that is not a zip fails without leaking the temp path', async () => {
+  const notZip = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-nz-')), 'x.zip');
+  fs.writeFileSync(notZip, 'this is not a zip archive');
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  await assert.rejects(
+    () => extractWanted(notZip, 'ig', dest),
+    (e) => /not a zip archive/.test(e.message) && !/\/tmp|\.upload-/.test(e.message),
+  );
+});
+
+test('a second archive replaces the first rather than merging into it', async () => {
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  await extractWanted(makeZip(IG_ARCHIVE), 'ig', dest);
+  await extractWanted(makeZip({ 'saved_posts.json': '{"saved_saved_media":[]}' }), 'ig', dest);
+  assert.deepEqual(fs.readdirSync(dest), ['saved_posts.json'],
+    'the previous export’s collections file is gone, not left behind');
+});
+
+test('Takeout playlists are pulled from a YouTube archive', async () => {
+  const zip = makeZip({
+    'Takeout/YouTube and YouTube Music/playlists/Watch later-videos.csv': 'Video ID\ndQw4w9WgXcQ\n',
+    'Takeout/YouTube and YouTube Music/videos/myvideo.mp4': 'VIDEODATA',
+    'Takeout/archive_browser.html': '<html></html>',
+  });
+  const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-out-'));
+  const { files } = await extractWanted(zip, 'yt', dest);
+  assert.deepEqual(files, ['Watch later-videos.csv']);
+});
+
+
+// ── Instagram's HTML export ──────────────────────────────────────────────────
+//
+// The download page hands you HTML unless you notice the format switch, so this
+// is the shape a real export actually has. The JSON-only parser this started
+// with matched none of it and reported the archive as the wrong one.
+//
+// The markup below is Meta's, reduced to the parts the parser keys on: nested
+// `div.pam` blocks whose leaves are two-column label/value tables, with a
+// `Name` + `Type` pair opening each collection.
+
+function igCell(label, value) {
+  return `<td class="_a6_q">${label}</td><td class="_2piu _a6_r">${value}</td>`;
+}
+
+function igItem(shortcode, username) {
+  // Meta's real shape: the link sits in a full-width `_a6_q` cell with no value
+  // cell beside it, which is precisely why the label/value pattern steps over
+  // it and the URL alternative gets to claim it. It appears twice — once as the
+  // href, once as the anchor text.
+  const url = `https://www.instagram.com/p/${shortcode}/`;
+  return '<div class="pam _3-95 _2ph- _a6-g uiBoxWhite noborder"><div class="_a6-p"><table style="table-layout: fixed;">' +
+    `<tr><td colspan="2" class="_a6_q">URL<div><a target="_blank" href="${url}">${url}</a></div></td></tr>` +
+    `<tr>${igCell('Caption', 'some caption text')}</tr>` +
+    `<tr>${igCell('Name', 'Display Name')}</tr>` +
+    `<tr>${igCell('Username', username)}</tr>` +
+    '</table></div></div>';
+}
+
+function igCollectionsHtml(collections) {
+  const body = collections.map(([name, items]) =>
+    '<div class="pam _3-95 _2ph- _a6-g uiBoxWhite noborder"><div class="_a6-p"><table>' +
+    `<tr>${igCell('Name', name)}</tr>` +
+    `<tr>${igCell('Type', 'Default')}</tr>` +
+    `<tr>${igCell('Privacy', 'Private')}</tr>` +
+    `<tr>${igCell('Update time', 'Dec 02, 2025')}</tr>` +
+    '</table>' + items.map(([c, u]) => igItem(c, u)).join('') + '</div></div>',
+  ).join('');
+  return `<html><body><div class="pam"><h2>Media</h2>${body}</div></body></html>`;
+}
+
+function writeIgHtml(files) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-ightml-'));
+  for (const [name, body] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), body);
+  return dir;
+}
+
+test('an HTML export is parsed, not just JSON', () => {
+  const dir = writeIgHtml({
+    'saved_collections.html': igCollectionsHtml([['Design Refs', [['AAA111aaa', 'designmilk']]]]),
+  });
+  const { collections, records } = instagram.readExport(dir);
+  assert.equal(collections['Design Refs'], 1);
+  assert.equal(records[0].rawId, 'AAA111aaa');
+  assert.equal(records[0].authorHandle, 'designmilk');
+});
+
+test('a Name row only opens a collection when Type follows it', () => {
+  // In saved_posts.html the same label is the *owner's* display name. Treating
+  // it as a collection would turn every account you saved from into a folder.
+  const dir = writeIgHtml({
+    'saved_posts.html':
+      `<html><body>${igItem('BBB222bbb', 'naval')}${igItem('CCC333ccc', 'pmarca')}</body></html>`,
+  });
+  const { collections, records } = instagram.readExport(dir);
+  assert.deepEqual(Object.keys(collections), ['All Saved']);
+  assert.equal(records.length, 2);
+  assert.deepEqual(records.map(r => r.authorHandle).sort(), ['naval', 'pmarca']);
+});
+
+test('items are attributed to the collection they sit under', () => {
+  const dir = writeIgHtml({
+    'saved_collections.html': igCollectionsHtml([
+      ['Design Refs', [['AAA111aaa', 'designmilk'], ['BBB222bbb', 'swissmiss']]],
+      ['Space', [['CCC333ccc', 'nasa']]],
+    ]),
+  });
+  const { collections } = instagram.readExport(dir);
+  assert.equal(collections['Design Refs'], 2);
+  assert.equal(collections['Space'], 1);
+});
+
+test('the duplicated link per item is counted once', () => {
+  const dir = writeIgHtml({
+    'saved_collections.html': igCollectionsHtml([['Solo', [['AAA111aaa', 'naval']]]]),
+  });
+  assert.equal(instagram.readExport(dir).records.length, 1);
+});
+
+test('a cell capture cannot swallow the links between cells', () => {
+  // The bug this replaced: a plain non-greedy capture reached past its own
+  // </td> hunting for a value cell, absorbing whole nested tables — and every
+  // post link inside them — into one nonsense token.
+  const rows = instagram.parseHtml.length; // arity check keeps the export honest
+  assert.equal(rows, 2);
+  const dir = writeIgHtml({
+    'saved_collections.html': igCollectionsHtml([['Big', [
+      ['AAA111aaa', 'a'], ['BBB222bbb', 'b'], ['CCC333ccc', 'c'],
+    ]]]),
+  });
+  assert.equal(instagram.readExport(dir).collections['Big'], 3);
+});
+
+test('saved_music is not treated as saved posts', () => {
+  const dir = writeIgHtml({
+    'saved_collections.html': igCollectionsHtml([['Keep', [['AAA111aaa', 'naval']]]]),
+    'saved_music.html': igCollectionsHtml([['Tracks', [['ZZZ999zzz', 'artist']]]]),
+  });
+  const { files, collections } = instagram.readExport(dir);
+  assert.ok(!files.includes('saved_music.html'), 'the music list is not a saved-posts file');
+  assert.ok(!collections['Tracks']);
 });

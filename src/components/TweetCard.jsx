@@ -133,6 +133,7 @@ export default function TweetCard({
   const [overflows, setOverflows]           = useState(false);
   const textRef = useRef(null);
   const notePopupRef  = useRef(null);
+  const noteWrapRef   = useRef(null);
   const noteInputRef  = useRef(null);
 
   const isFav = folders.length > 0;
@@ -162,10 +163,17 @@ export default function TweetCard({
 
   useEffect(() => {
     if (!showNotePopup) return;
-    setTimeout(() => noteInputRef.current?.focus(), 50);
-    const close = (e) => { if (!notePopupRef.current?.contains(e.target)) setShowNotePopup(false); };
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
+    noteInputRef.current?.focus();
+    // "Outside" means outside the wrapper, not outside the popup — the pencil
+    // is a sibling of the popup, and `mousedown` on it fires before its own
+    // click. Excluding only the popup meant pressing the pencil closed the
+    // panel on mousedown and the click then reopened it, or didn't, depending
+    // on how React batched the two.
+    const close = (e) => {
+      if (!noteWrapRef.current?.contains(e.target)) setShowNotePopup(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
   }, [showNotePopup]);
 
   const handle = b.authorHandle || '';
@@ -276,39 +284,61 @@ export default function TweetCard({
               </button>
             )}
 
-            {/* Note button */}
-            <button
-              className={`tw-btn note-btn${note ? ' active' : ''}`}
-              title={note ? 'Edit note' : 'Add note'}
-              onClick={handleNoteClick}
-              style={{ position: 'relative' }}
-            >
-              <svg viewBox="0 0 24 24" fill={note ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={note ? '0' : '1.8'}>
-                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-              </svg>
+            {/* Note.
+
+                The popup is a sibling of the button, not a child of it.
+                Nesting a textarea inside a <button> is invalid HTML, and the
+                browser enforces that the way browsers do: Space is button
+                activation, so every space you typed fired a click and closed
+                the note you were writing. */}
+            <span className="note-wrap" ref={noteWrapRef}>
+              <button
+                className={`tw-btn note-btn${note ? ' active' : ''}${showNotePopup ? ' open' : ''}`}
+                title={note ? 'Edit note' : 'Add note'}
+                onClick={handleNoteClick}
+              >
+                <svg viewBox="0 0 24 24" fill={note ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={note ? '0' : '1.8'}>
+                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                </svg>
+              </button>
+
               {showNotePopup && (
                 <div className="note-popup" ref={notePopupRef} onClick={e => e.stopPropagation()}>
-                  <div className="note-popup-title">Note</div>
+                  <div className="note-popup-head">
+                    <span className="note-popup-title">{note ? 'Edit note' : 'Add note'}</span>
+                    <span className="note-popup-for">{name}</span>
+                  </div>
                   <textarea
                     ref={noteInputRef}
                     className="note-popup-textarea"
-                    placeholder="Add a note…"
+                    placeholder="Why you kept this…"
                     value={noteText}
                     onChange={e => setNoteText(e.target.value)}
-                    rows={3}
-                    onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) saveNote(); }}
+                    rows={4}
+                    onKeyDown={e => {
+                      // Stop the feed's j/k/r/f shortcuts hearing this at all.
+                      e.stopPropagation();
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveNote(); }
+                      if (e.key === 'Escape') { e.preventDefault(); setNoteText(note || ''); setShowNotePopup(false); }
+                    }}
                   />
                   <div className="note-popup-actions">
                     {note && (
-                      <button className="note-popup-delete" onClick={() => { setNoteText(''); setShowNotePopup(false); onUpdateNote(b.id, null); }}>
-                        Delete
-                      </button>
+                      <button
+                        className="note-popup-delete"
+                        onClick={() => { setNoteText(''); setShowNotePopup(false); onUpdateNote(b.id, null); }}
+                      >Delete</button>
                     )}
-                    <button className="note-popup-save" onClick={saveNote}>Save</button>
+                    <span className="note-popup-hint"><kbd>⌘</kbd><kbd>↵</kbd> save · <kbd>esc</kbd> cancel</span>
+                    <button
+                      className="note-popup-save"
+                      onClick={saveNote}
+                      disabled={noteText.trim() === (note || '').trim()}
+                    >Save</button>
                   </div>
                 </div>
               )}
-            </button>
+            </span>
 
             {/* Read button */}
             <button

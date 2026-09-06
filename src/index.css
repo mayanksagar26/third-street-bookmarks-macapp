@@ -3136,3 +3136,95 @@ kbd {
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
+
+/* ── Note popup, restyled ──────────────────────────────────────────────────────
+   The wrapper exists so the popup can be positioned against the pencil while
+   being a *sibling* of it rather than a child — a textarea inside a <button> is
+   invalid HTML, and the browser's reading of it is that Space activates the
+   button, which closed the note on every space you typed. */
+
+.note-wrap { position: relative; display: inline-flex; }
+
+.note-popup {
+  width: 300px;
+  padding: 14px;
+  border-radius: 14px;
+  /* Right-anchored, but never off the left edge of a narrow card. */
+  right: 0;
+  animation: note-pop 0.13s ease-out;
+  transform-origin: top right;
+}
+@keyframes note-pop {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.note-popup-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+.note-popup-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+/* Whose bookmark this is attached to — three popups open in a long feed look
+   identical otherwise. */
+.note-popup-for {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.note-popup-textarea {
+  min-height: 84px;
+  padding: 10px 11px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  resize: none;
+}
+.note-popup-textarea::placeholder { color: var(--text-tertiary); }
+.note-popup-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(55, 180, 255, 0.14);
+}
+
+.note-popup-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.note-popup-hint {
+  flex: 1;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.note-popup-hint kbd {
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  font-family: inherit;
+  font-size: 10px;
+}
+.note-popup-save { padding: 6px 15px; transition: background 0.15s, opacity 0.15s; }
+/* Nothing changed, nothing to save — the button says so rather than pretending. */
+.note-popup-save:disabled { opacity: 0.4; cursor: default; background: var(--accent); }
+.note-popup-delete { transition: border-color 0.15s, color 0.15s; }
+.note-popup-delete:hover { border-color: var(--like); }
+
+/* The pencil stays lit while its note is open. */
+.tw-btn.note-btn.open { color: var(--accent); background: rgba(55, 180, 255, 0.12); }

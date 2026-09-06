@@ -3061,3 +3061,78 @@ kbd {
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
+
+/* ── Reading typeface ──────────────────────────────────────────────────────────
+   Bundled as latin woff2 subsets so the app renders the face you picked with no
+   network. `font-display: block` rather than `swap`: this is a preference you
+   set deliberately, and a flash of the system font on every launch would make
+   the setting look like it had not taken. */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url('/fonts/literata-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Architects Daughter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('/fonts/architects-daughter-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
+}
+
+:root {
+  --app-font: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --app-font-scale: 1;
+}
+
+/* The content, not the chrome. A hand-drawn sidebar is a novelty; a hand-drawn
+   page of saved writing is a reading choice. */
+.tweet-text,
+.tweet-title,
+.quoted-tweet-text,
+.chat-assistant-text,
+.chat-bubble,
+.hn-story-title,
+.stats-observation p {
+  font-family: var(--app-font);
+  font-size: calc(1em * var(--app-font-scale));
+}
+
+/* The picker previews each face in itself — a name alone tells you nothing. */
+.font-choice-sample {
+  display: block;
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* "Sync & Classify" drives one source; the label should say so. */
+.panel-card-qualifier {
+  margin-left: 7px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}

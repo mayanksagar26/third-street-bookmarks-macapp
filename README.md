@@ -124,6 +124,12 @@ saving patterns over time:
 
 ![Stats and observations](docs/screenshots/05-stats.png)
 
+**Pick a reading face.** Settings → Appearance offers five: the system font,
+Inter, a serif for long reading, a hand-drawn one, and a monospace. It applies
+to the text you read and not to the chrome — a hand-drawn interface is a
+novelty where a hand-drawn page is a reading choice. All five are bundled as
+latin subsets, so the face you picked is the face you get with no network.
+
 **Bookmark podcast.** Turn any slice of your collection into an audio digest —
 free browser TTS, or ElevenLabs / Sarvam if you want better voices:
 
@@ -149,7 +155,7 @@ route in is a Field Theory sync, so it goes straight to its feed.
 
 | Source | How it gets in | Needs |
 |---|---|---|
-| **X** | `ft sync` on a schedule you trigger | Field Theory |
+| **X** | `ft sync` on a schedule you trigger — the only source **Sync & Classify** drives | Field Theory |
 | **Hacker News** | Browse the front page or an AI feed, save what you want | nothing |
 | **YouTube** | Paste a video, import a public playlist, or a Takeout export | nothing / API key / export |
 | **Instagram** | Official data export | export |

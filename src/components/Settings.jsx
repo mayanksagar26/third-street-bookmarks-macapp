@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { FONTS, DEFAULT_FONT, applyFont } from '../fonts';
 import AgentPicker, { useRuntimes } from './AgentPicker';
 import BookmarkFinder from './BookmarkFinder';
 
@@ -13,6 +14,7 @@ const SECTIONS = [
   { id: 'ai', label: 'AI' },
   { id: 'bookmarks', label: 'Bookmarks' },
   { id: 'window', label: 'Window' },
+  { id: 'appearance', label: 'Appearance' },
   { id: 'about', label: 'About' },
 ];
 
@@ -195,6 +197,40 @@ export default function Settings({ onClose }) {
                   Also on <code>⌘1</code> and <code>⌘2</code>, under the View menu.
                   Dragging the window narrow switches layout on its own.
                 </p>
+              </div>
+            </>
+          )}
+
+          {section === 'appearance' && (
+            <>
+              <p className="set-lead">
+                Applies to the text you read — bookmarks, chat answers, story
+                titles. The sidebar and buttons keep the system font, because a
+                hand-drawn interface is a novelty where a hand-drawn page is a
+                reading choice.
+              </p>
+              <div className="set-field">
+                <div className="set-field-label">Reading font</div>
+                <div className="set-choices">
+                  {FONTS.map(font => (
+                    <button
+                      key={font.id}
+                      type="button"
+                      className={`set-choice ${(settings?.readingFont || DEFAULT_FONT) === font.id ? 'active' : ''}`}
+                      onClick={() => { patch({ readingFont: font.id }); applyFont(font.id); }}
+                    >
+                      <span className="set-choice-label">{font.label}</span>
+                      <span className="set-choice-hint">{font.hint}</span>
+                      {/* Previewed in itself — a name alone tells you nothing. */}
+                      <span
+                        className="font-choice-sample"
+                        style={{ fontFamily: font.stack }}
+                      >
+                        The quick brown fox jumps over the lazy dog
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </>
           )}

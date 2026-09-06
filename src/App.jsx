@@ -15,6 +15,7 @@ import AddBookmark from './components/AddBookmark';
 import SourceView from './components/SourceView';
 import { DEFAULT_SOURCE } from './sources';
 import { getBookmarkSource, sortsForSources } from './bookmark-sources';
+import { applyFont, DEFAULT_FONT } from './fonts';
 
 const PAGE_SIZE = 30;
 
@@ -148,6 +149,10 @@ export default function App() {
       if (d.classifyBackend) setClassifyBackend(d.classifyBackend);
       if (d.syncSource) setSyncSource(d.syncSource);
       if (d.syncBrowser) setSyncBrowser(d.syncBrowser);
+      // The reading face is a setting, so it has to be on the document before
+      // the feed paints rather than after — otherwise every launch flashes the
+      // system font and looks like the choice didn't stick.
+      applyFont(d.readingFont || DEFAULT_FONT);
     }).catch(() => {});
   }, []);
 

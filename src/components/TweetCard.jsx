@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import FavFolderPicker from './FavFolderPicker';
 import { getBookmarkSource, SourceIcon } from '../bookmark-sources';
 
@@ -106,15 +106,40 @@ export default function TweetCard({
   bookmark: b, searchQuery, isRead, folders = [], allFolders = [],
   note, isFocused,
   onToggleRead, onSetFavFolders, onRenameFavFolder, onUpdateNote, onSpeakBookmark,
+  onExplain,
 }) {
   const [showNotePopup, setShowNotePopup]   = useState(false);
   const [noteText, setNoteText]             = useState(note || '');
+  const [expanded, setExpanded]             = useState(false);
+  const [overflows, setOverflows]           = useState(false);
+  const textRef = useRef(null);
   const notePopupRef  = useRef(null);
   const noteInputRef  = useRef(null);
 
   const isFav = folders.length > 0;
 
   useEffect(() => { setNoteText(note || ''); }, [note]);
+
+  /**
+   * Does this card's text actually overflow?
+   *
+   * Measured rather than guessed from a character count, because the same 600
+   * characters is four lines of a YouTube description and eleven of a tweet
+   * full of line breaks. A count would put "View more" on cards that show
+   * everything already, and withhold it from ones that don't.
+   *
+   * Only measured while clamped — expanded, scrollHeight equals clientHeight
+   * and the answer would always be "no".
+   */
+  useLayoutEffect(() => {
+    if (expanded) return;
+    const el = textRef.current;
+    if (!el) { setOverflows(false); return; }
+    setOverflows(el.scrollHeight - el.clientHeight > 4);
+  }, [b.text, searchQuery, expanded]);
+
+  // A different bookmark in the same slot starts collapsed again.
+  useEffect(() => { setExpanded(false); }, [b.id]);
 
   useEffect(() => {
     if (!showNotePopup) return;
@@ -199,6 +224,24 @@ export default function TweetCard({
           <span className="tweet-date">{formatDate(b.postedAt)}</span>
 
           <div className="tweet-card-actions">
+            {/* Ask the AI about this one. First in the row because it is the
+                action you take *before* deciding whether to read, favourite or
+                keep the thing — the others all assume you already know what it
+                is. */}
+            {onExplain && (
+              <button
+                className="tw-btn ai-btn"
+                title="Explain this with AI"
+                onClick={e => { e.stopPropagation(); onExplain(b); }}
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2.5l1.65 4.6a4 4 0 0 0 2.4 2.4l4.6 1.65-4.6 1.65a4 4 0 0 0-2.4 2.4L12 19.8l-1.65-4.6a4 4 0 0 0-2.4-2.4L3.35 11.15l4.6-1.65a4 4 0 0 0 2.4-2.4L12 2.5z"/>
+                  <path d="M18.6 2.2l.62 1.73c.13.36.4.63.76.76l1.72.61-1.72.62a1.5 1.5 0 0 0-.76.75l-.62 1.73-.61-1.73a1.5 1.5 0 0 0-.76-.75l-1.73-.62 1.73-.61c.36-.13.63-.4.76-.76l.61-1.73z"/>
+                  <path d="M5.1 16.1l.5 1.4c.1.29.32.51.6.61l1.4.5-1.4.5c-.28.1-.5.32-.6.6l-.5 1.4-.5-1.4a1.2 1.2 0 0 0-.6-.6l-1.4-.5 1.4-.5c.28-.1.5-.32.6-.61l.5-1.4z"/>
+                </svg>
+              </button>
+            )}
+
             {/* Speak button */}
             {onSpeakBookmark && (
               <button
@@ -278,10 +321,21 @@ export default function TweetCard({
         )}
 
         {b.text && (
-          <div
-            className="tweet-text"
-            dangerouslySetInnerHTML={{ __html: getProcessedText(b.text, searchQuery) }}
-          />
+          <>
+            <div
+              ref={textRef}
+              className={`tweet-text${expanded ? '' : ' is-clamped'}`}
+              dangerouslySetInnerHTML={{ __html: getProcessedText(b.text, searchQuery) }}
+            />
+            {(overflows || expanded) && (
+              <button
+                className="tweet-more"
+                onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
+              >
+                {expanded ? 'View less' : 'View more'}
+              </button>
+            )}
+          </>
         )}
 
         {/* A video or article without its thumbnail is a worse row than a plain

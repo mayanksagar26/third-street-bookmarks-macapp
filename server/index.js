@@ -5,7 +5,7 @@ const os = require('os');
 const { spawn } = require('child_process');
 const { detectRuntimes, findBinary } = require('./agents');
 const { discover } = require('./discover');
-const { agentEnv, buildAgentArgs } = require('./agent-run');
+const { agentEnv, buildAgentArgs, fenceUntrusted } = require('./agent-run');
 const store = require('./sources-store');
 const hn = require('./ingest/hn');
 const yt = require('./ingest/youtube');
@@ -1079,6 +1079,74 @@ const CATEGORIES = [
   'travel','sports','books','food','history','self-improvement','community',
   'leadership','marketing','policy','science','misc',
 ];
+
+/**
+ * Explain one bookmark.
+ *
+ * The prompt is built here rather than accepted from the client, for two
+ * reasons. The fencing has to wrap content the caller cannot choose, or it
+ * protects nothing. And the elevated `WebSearch` permission is granted per
+ * request, so the request had better describe a bookmark that actually exists
+ * rather than arbitrary text someone posted to the port.
+ */
+app.post('/api/explain', (req, res) => {
+  const id = String(req.body?.id || '');
+  let bm;
+  try {
+    bm = readBookmarks().find(b => b.id === id || b.tweetId === id);
+  } catch {
+    return res.status(500).json({ error: 'could not read the collection' });
+  }
+  if (!bm) return res.status(404).json({ error: 'No such bookmark' });
+
+  const settings = readSettings();
+  const backend = settings.aiBackend || 'claude';
+  // Opt-out lives in settings; the button asks for it, the user can refuse.
+  const web = settings.aiWebSearch !== false;
+
+  const facts = [
+    bm.title ? `Title: ${bm.title}` : null,
+    bm.authorName || bm.authorHandle ? `Author: ${bm.authorName || ''} ${bm.authorHandle ? `(@${bm.authorHandle})` : ''}`.trim() : null,
+    `Source: ${bm.sourceLabel || bm.source || 'X'}`,
+    bm.url ? `URL: ${bm.url}` : null,
+    bm.postedAt ? `Posted: ${bm.postedAt}` : null,
+    bm.points ? `Hacker News points: ${bm.points}` : null,
+  ].filter(Boolean).join('\n');
+
+  const prompt = [
+    'You are explaining one saved bookmark to the person who saved it.',
+    '',
+    fenceUntrusted('bookmark', `${facts}\n\n${(bm.text || '').slice(0, 6000)}`),
+    '',
+    'Write a short brief, in this order and with these headings:',
+    '',
+    '**What it is** — one or two sentences, plainly.',
+    '**Why it matters** — the point a reader would take away.',
+    '**Context** — what has happened around this since, or what a reader needs',
+    'to know to place it. Say plainly if you are unsure.',
+    '',
+    web
+      ? 'You may use WebSearch to check current context. Cite what you found by name.'
+      : 'Web search is switched off, so answer from the bookmark and what you already know.',
+    '',
+    'No preamble, no restating the task. Under 200 words. If the bookmark is too',
+    'thin to say anything useful, say exactly that instead of padding.',
+  ].join('\n');
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const cmd = backend === 'codex' ? 'codex' : 'claude';
+  const proc = spawn(cmd, buildAgentArgs(backend, prompt, { web }), { env: agentEnv(EXTRA_PATH) });
+  proc.stdout.on('data', d => { if (!res.writableEnded) res.write(d); });
+  proc.stderr.on('data', () => {});
+  proc.on('close', () => { if (!res.writableEnded) res.end(); });
+  proc.on('error', () => {
+    const msg = `\n\n⚠️ ${backend} CLI not found. Install it or switch AI backend in settings.`;
+    if (!res.writableEnded) { res.write(msg); res.end(); }
+  });
+});
 
 app.post('/api/classify-ai', (req, res) => {
   const settings = readSettings();

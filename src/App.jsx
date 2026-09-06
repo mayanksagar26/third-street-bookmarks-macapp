@@ -70,6 +70,9 @@ export default function App() {
   const [settingsOpen, setSettingsOpen]         = useState(false);
   // Which tab the add pane opens on when a source row sends you there.
   const [addTab, setAddTab]                     = useState('paste');
+  // The bookmark the AI button was pressed on, handed to the chat pane so it
+  // can open already asking about it.
+  const [explainTarget, setExplainTarget]       = useState(null);
   // Source is its own axis, not another value of `currentFilter`.
   //
   // While they shared one variable, picking a source *replaced* "All Bookmarks"
@@ -658,6 +661,18 @@ export default function App() {
     openSource(id, 'browse');
   }, [openSource]);
 
+  /**
+   * The AI button on a card.
+   *
+   * Opens the chat pane already asking about that bookmark, rather than
+   * dropping you into an empty prompt you then have to describe the thing in.
+   * A fresh object each time so pressing it twice on the same card asks again.
+   */
+  const handleExplain = useCallback((bm) => {
+    setExplainTarget({ bookmark: bm, at: Date.now() });
+    setActiveMode('chat');
+  }, []);
+
   // One definition, two mount points: the ordinary feed, and the Saved tab
   // inside a source view. Duplicating twenty props across both is how one of
   // them quietly loses a handler.
@@ -674,6 +689,7 @@ export default function App() {
     onBulkRead: handleBulkRead,
     onPageChange: (p) => { setCurrentPage(p); setFocusedIdx(-1); },
     onSpeakBookmark: (bm) => handleTtsSpeak(`From ${bm.authorName || bm.authorHandle}: ${cleanForVoice(bm.text)}`),
+    onExplain: handleExplain,
   };
 
   const handleVoiceClick = useCallback((handle) => {
@@ -709,6 +725,8 @@ export default function App() {
           <ChatWithBookmarks
             bookmarks={allBookmarks}
             aiBackend={aiBackend}
+            explainTarget={explainTarget}
+            onExplainConsumed={() => setExplainTarget(null)}
             favMap={favMap}
             favFolders={favFolders}
             onSetFavFolders={handleSetFavFolders}

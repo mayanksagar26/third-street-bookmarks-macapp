@@ -2896,3 +2896,36 @@ kbd {
 /* Without tabs the feed sits straight under the header, so it needs the gap
    the tab strip used to provide. */
 .source-view:not(:has(.source-tabs)) .source-view-head { padding-bottom: 12px; }
+
+/* ── Long text: clamp, then let the reader ask for the rest ────────────────── */
+/*
+   An imported YouTube description runs to several hundred words of links and
+   chapter markers, and a Hacker News post can be an essay. Rendered in full
+   they push every other card off the screen, so one long item costs you the
+   scan the feed exists to provide.
+*/
+.tweet-text.is-clamped {
+  max-height: 15.5em;
+  overflow: hidden;
+  /* Fade rather than a hard cut, so it reads as "continues" and not as text
+     that happens to end mid-sentence. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 74%, transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 74%, transparent 100%);
+}
+
+.tweet-more {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.tweet-more:hover { text-decoration: underline; }
+
+/* The AI button reads as its own kind of action, not another toggle. */
+.tw-btn.ai-btn { color: var(--accent); }
+.tw-btn.ai-btn:hover { color: var(--accent-hover); background: rgba(55, 180, 255, 0.12); }

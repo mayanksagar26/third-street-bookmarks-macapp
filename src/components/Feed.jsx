@@ -146,7 +146,7 @@ export default function Feed({
   bookmarks, page, pageSize, loading, error,
   searchQuery, readIds, favMap, favFolders,
   notesMap, focusedIdx, viewKey,
-  onToggleRead, onSetFavFolders, onRenameFavFolder, onUpdateNote,
+  onToggleRead, onSetFavFolders, onRenameFavFolder, onUpdateNote, onExplain,
   onBulkRead, onPageChange, ttsConfig, onSpeakBookmark,
 }) {
   const start = (page - 1) * pageSize;
@@ -215,6 +215,7 @@ export default function Feed({
               note={notesMap[b.id] || null}
               isFocused={index >= 0 && index === focusedIdx}
               onToggleRead={onToggleRead}
+              onExplain={onExplain}
               onSetFavFolders={onSetFavFolders}
               onRenameFavFolder={onRenameFavFolder}
               onUpdateNote={onUpdateNote}

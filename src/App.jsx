@@ -14,7 +14,7 @@ import HackerNews from './components/HackerNews';
 import AddBookmark from './components/AddBookmark';
 import SourceView from './components/SourceView';
 import { DEFAULT_SOURCE } from './sources';
-import { getBookmarkSource } from './bookmark-sources';
+import { getBookmarkSource, sortsForSources } from './bookmark-sources';
 
 const PAGE_SIZE = 30;
 
@@ -29,6 +29,7 @@ function sortBookmarks(list, sort) {
   if (sort === 'likes')     return copy.sort((a, b) => (b.likeCount || 0) - (a.likeCount || 0));
   if (sort === 'bookmarks') return copy.sort((a, b) => (b.bookmarkCount || 0) - (a.bookmarkCount || 0));
   if (sort === 'reposts')   return copy.sort((a, b) => (b.repostCount || 0) - (a.repostCount || 0));
+  if (sort === 'replies')   return copy.sort((a, b) => (b.replyCount || 0) - (a.replyCount || 0));
   if (sort === 'author')    return copy.sort((a, b) => (a.authorHandle || '').localeCompare(b.authorHandle || ''));
   return copy;
 }
@@ -84,6 +85,8 @@ export default function App() {
   // A container the source owns (a YouTube playlist, an Instagram collection),
   // scoped to the source view rather than the sidebar's global folder list.
   const [sourceFolder, setSourceFolder]         = useState(null);
+  // { key, name, source } — a folder is identified by both halves, never a name.
+  const [folderPick, setFolderPick]             = useState(null);
 
   // The native menu's Settings item (Cmd+,) reaches React through an event,
   // since the menu lives in Rust and has no other handle on this tree.
@@ -279,9 +282,12 @@ export default function App() {
     }
 
     if (currentFilter !== 'all') {
-      if (currentFilter.startsWith('folder:')) {
-        const folder = currentFilter.slice(7);
-        result = result.filter(b => (b.folderNames || []).includes(folder));
+      if (currentFilter === 'folder' && folderPick) {
+        // Matched on source as well as name: two services can both have a
+        // folder called "Informative", and they are not the same folder.
+        result = result.filter(b =>
+          (b.source || 'x') === folderPick.source &&
+          (b.folderNames || []).includes(folderPick.name));
       } else if (currentFilter === 'fav:all') {
         result = result.filter(b => favMap[b.id]?.length);
       } else if (currentFilter.startsWith('fav:')) {
@@ -313,7 +319,7 @@ export default function App() {
     }
 
     return sortBookmarks(result, currentSort);
-  }, [allBookmarks, currentFilter, currentSort, searchQuery, readIds, favMap, notesMap, currentVoice, showUnreadOnly, selectedCategories, sourceFilter, sourceFolder]);
+  }, [allBookmarks, currentFilter, currentSort, searchQuery, readIds, favMap, notesMap, currentVoice, showUnreadOnly, selectedCategories, sourceFilter, sourceFolder, folderPick]);
 
   /**
    * Identity of the current view, for the feed's leave animation.
@@ -326,9 +332,9 @@ export default function App() {
     () => [
       currentFilter, currentSort, searchQuery, showUnreadOnly ? 'unread' : 'all',
       currentVoice || '', [...selectedCategories].sort().join('+'),
-      sourceFilter || '', sourceFolder || '',
+      sourceFilter || '', sourceFolder || '', folderPick?.key || '',
     ].join('|'),
-    [currentFilter, currentSort, searchQuery, showUnreadOnly, currentVoice, selectedCategories, sourceFilter, sourceFolder],
+    [currentFilter, currentSort, searchQuery, showUnreadOnly, currentVoice, selectedCategories, sourceFilter, sourceFolder, folderPick],
   );
 
   const unreadCount = useMemo(() => allBookmarks.filter(b => !readIds.has(b.id)).length, [allBookmarks, readIds]);
@@ -361,22 +367,51 @@ export default function App() {
     return counts;
   }, [allBookmarks]);
 
-  const folderCounts = useMemo(() => {
-    const counts = {};
-    allBookmarks.forEach(b => (b.folderNames || []).forEach(f => { counts[f] = (counts[f] || 0) + 1; }));
-    return counts;
-  }, [allBookmarks]);
+  /** The sources present in what is currently displayed, for the sort bar. */
+  const visibleSources = useMemo(() => {
+    const set = new Set();
+    for (const b of filtered) set.add(b.source || 'x');
+    return [...set];
+  }, [filtered]);
 
-  /** Which source each folder came from, so the sidebar can mark it. */
-  const folderSources = useMemo(() => {
-    const map = {};
-    allBookmarks.forEach(b => {
+  // If the active sort stops being offered — you were on "Most Reposted" and
+  // then opened Hacker News — fall back rather than leaving the bar with
+  // nothing highlighted and the feed in an order nothing explains.
+  useEffect(() => {
+    const allowed = sortsForSources(visibleSources).map(s => s.key);
+    if (allowed.length && !allowed.includes(currentSort)) setCurrentSort('newest');
+  }, [visibleSources, currentSort]);
+
+  /**
+   * Folders, keyed by name *and* source.
+   *
+   * A YouTube playlist and an Instagram collection can both be called
+   * "Informative", and merging them under one row produced a folder belonging
+   * to neither: one count, one logo, and a click that showed both. They are two
+   * rows now. Only the ones whose name is ambiguous say which service they came
+   * from — labelling every folder would be noise on the ones that need no
+   * explanation.
+   */
+  const folderIndex = useMemo(() => {
+    const counts = new Map();
+    const bySource = new Map();
+    for (const b of allBookmarks) {
       const src = b.source || 'x';
-      (b.folderNames || []).forEach(f => {
-        (map[f] = map[f] || new Set()).add(src);
-      });
-    });
-    return Object.fromEntries(Object.entries(map).map(([f, set]) => [f, [...set]]));
+      for (const f of (b.folderNames || [])) {
+        const key = `${src} ${f}`;
+        counts.set(key, (counts.get(key) || 0) + 1);
+        if (!bySource.has(f)) bySource.set(f, new Set());
+        bySource.get(f).add(src);
+      }
+    }
+    return [...counts.entries()]
+      .map(([key, count]) => {
+        const sep = key.indexOf(' ');
+        const source = key.slice(0, sep);
+        const name = key.slice(sep + 1);
+        return { key, name, source, count, ambiguous: bySource.get(name).size > 1 };
+      })
+      .sort((a, b) => b.count - a.count);
   }, [allBookmarks]);
 
   /**
@@ -643,12 +678,13 @@ export default function App() {
     // whole thing — a playlist, a collection — so opening one and being shown
     // the slice that survives whichever source and read state happened to be
     // set is not what the click asked for.
-    if (filter === 'all' || filter.startsWith('fav:') || filter.startsWith('folder:')) {
+    if (filter === 'all' || filter.startsWith('fav:') || filter === 'folder') {
       setShowUnreadOnly(false);
     }
     // Same reasoning for the source: a folder belongs to one already, and
     // intersecting it with a different one shows an empty feed.
-    if (filter.startsWith('folder:')) { setSourceFilter(null); setSourceFolder(null); }
+    if (filter === 'folder') { setSourceFilter(null); setSourceFolder(null); }
+    else setFolderPick(null);
     // Picking anything in the sidebar is a request to look at the feed. Leaving
     // a tool pane covering it meant the click appeared to do nothing at all.
     // The source filter deliberately survives: "All Bookmarks" answers read-or-
@@ -734,6 +770,32 @@ export default function App() {
     onExplain: handleExplain,
   };
 
+  /**
+   * Picking a folder row. Clicking the open one closes it, like every filter here.
+   *
+   * Deliberately not routed through `handleFilterChange`: its toggle treats
+   * "same filter clicked twice" as a deselect, and every folder shares the one
+   * filter value, so moving from one folder straight to another read as
+   * closing the first and dropped you back to everything.
+   */
+  const handleFolderClick = useCallback((entry) => {
+    setFolderPick(prev => {
+      const same = prev && prev.key === entry.key;
+      setCurrentFilter(same ? 'all' : 'folder');
+      if (!same) {
+        // A folder is a whole thing: show all of it, not the slice that
+        // survives whichever source and read state happened to be set.
+        setShowUnreadOnly(false);
+        setSourceFilter(null);
+        setSourceFolder(null);
+      }
+      setActiveMode(null);
+      setCurrentPage(1);
+      setFocusedIdx(-1);
+      return same ? null : entry;
+    });
+  }, []);
+
   const handleVoiceClick = useCallback((handle) => {
     setCurrentVoice(prev => prev === handle ? null : handle);
     setCurrentPage(1);
@@ -754,8 +816,9 @@ export default function App() {
         onClearCategories={() => { setSelectedCats(new Set()); setCurrentPage(1); }}
         favMap={favMap}
         favFolders={favFolders}
-        folderCounts={folderCounts}
-        folderSources={folderSources}
+        folderIndex={folderIndex}
+        folderPick={folderPick}
+        onFolderClick={handleFolderClick}
         sourceCounts={sourceCounts}
         sourceTotals={sourceTotals}
         sourceFilter={sourceFilter}
@@ -814,12 +877,12 @@ export default function App() {
                 activeFolder={sourceFolder}
                 onPickFolder={(f) => { setSourceFolder(f); setSourceTab('saved'); setCurrentPage(1); }}
               >
-                <SortBar currentSort={currentSort} onSort={(s) => { setCurrentSort(s); setCurrentPage(1); }} />
+                <SortBar currentSort={currentSort} sourceIds={visibleSources} onSort={(s) => { setCurrentSort(s); setCurrentPage(1); }} />
                 <Feed {...feedProps} />
               </SourceView>
             ) : (
             <>
-            <SortBar currentSort={currentSort} onSort={(s) => { setCurrentSort(s); setCurrentPage(1); }} />
+            <SortBar currentSort={currentSort} sourceIds={visibleSources} onSort={(s) => { setCurrentSort(s); setCurrentPage(1); }} />
             {!loading && !error && <StatsBar bookmarks={allBookmarks} />}
             <Feed {...feedProps} />
             </>

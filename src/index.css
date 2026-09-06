@@ -3044,3 +3044,20 @@ kbd {
 .folder-marks svg { flex-shrink: 0; }
 .folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-item.folder-item .sidebar-item-left { min-width: 0; }
+
+/* Hacker News points read as a vote, not a like. */
+.tweet-action.points { color: #ff9d5c; }
+.tweet-action.duration { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+
+/* Only the folders whose name exists in two services carry the service name. */
+.folder-qualifier {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}

@@ -1,16 +1,18 @@
-const SORTS = [
-  { key: 'newest',    label: 'Newest' },
-  { key: 'oldest',    label: 'Oldest' },
-  { key: 'likes',     label: 'Most Liked' },
-  { key: 'bookmarks', label: 'Most Bookmarked' },
-  { key: 'reposts',   label: 'Most Reposted' },
-  { key: 'author',    label: 'By Author' },
-];
+import { sortsForSources } from '../bookmark-sources';
 
-export default function SortBar({ currentSort, onSort }) {
+// Only the sorts that mean something for what is on screen.
+//
+// Every source used to get X's six, so a Hacker News view offered "Most
+// Reposted" and an Instagram one offered "Most Bookmarked" — controls that
+// re-order nothing because every row reports zero. A control that appears to be
+// broken is worse than one that isn't there.
+
+export default function SortBar({ currentSort, onSort, sourceIds = [] }) {
+  const sorts = sortsForSources(sourceIds);
+
   return (
     <div className="sort-bar">
-      {SORTS.map(s => (
+      {sorts.map(s => (
         <button
           key={s.key}
           className={`sort-btn ${currentSort === s.key ? 'active' : ''}`}

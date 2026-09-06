@@ -17,6 +17,25 @@ function getCatClass(cat) {
   return CAT_CLASS[cat.toLowerCase().replace(/[^a-z ]/g, '').trim()] || 'cat-other';
 }
 
+/**
+ * The counters a card can draw, keyed by the icon a source asks for.
+ *
+ * Which of these appear is declared per source in `bookmark-sources`, not
+ * decided here: X reports four, Hacker News two under different names, and the
+ * export-based sources report none at all. Rendering a fixed four meant every
+ * Instagram row read "0 0 0 0" — which looks like a post nobody ever touched
+ * rather than like data the export simply does not contain.
+ */
+const METRIC_ICONS = {
+  reply: <path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 7.879 3.77 7.879 8.004 0 3.783-2.96 7.292-6.893 7.92a.5.5 0 01-.579-.49v-1.79c0-.145-.049-.274-.13-.373-.12-.146-.322-.197-.51-.146a8 8 0 01-2.147.298c-4.421 0-7.991-3.58-7.991-8.003z"/>,
+  repost: <path d="M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z"/>,
+  like: <path d="M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/>,
+  bookmark: <path d="M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z"/>,
+  // Hacker News votes are a caret, the way the site draws them itself.
+  points: <path d="M12 4l8 10h-5v6H9v-6H4l8-10z"/>,
+  comment: <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>,
+};
+
 function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : ''; }
 function fmt(n) { return Number(n || 0).toLocaleString(); }
 
@@ -404,22 +423,15 @@ export default function TweetCard({
         </div>
 
         <div className="tweet-actions">
-          <span className="tweet-action">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 7.879 3.77 7.879 8.004 0 3.783-2.96 7.292-6.893 7.92a.5.5 0 01-.579-.49v-1.79c0-.145-.049-.274-.13-.373-.12-.146-.322-.197-.51-.146a8 8 0 01-2.147.298c-4.421 0-7.991-3.58-7.991-8.003z"/></svg>
-            {fmt(b.replyCount)}
-          </span>
-          <span className="tweet-action repost">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z"/></svg>
-            {fmt(b.repostCount)}
-          </span>
-          <span className="tweet-action like">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/></svg>
-            {fmt(b.likeCount)}
-          </span>
-          <span className="tweet-action bookmark">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z"/></svg>
-            {fmt(b.bookmarkCount)}
-          </span>
+          {/* Only what this source actually reports — see METRIC_ICONS. */}
+          {(src.metrics || []).map(m => (
+            <span key={m.field} className={`tweet-action ${m.icon}`} title={m.title || m.icon}>
+              <svg viewBox="0 0 24 24" fill="currentColor">{METRIC_ICONS[m.icon]}</svg>
+              {fmt(b[m.field])}
+            </span>
+          ))}
+          {b.duration && <span className="tweet-action duration">{b.duration}</span>}
+
           {tweetUrl(b) && (
             <a
               className="view-on-x"

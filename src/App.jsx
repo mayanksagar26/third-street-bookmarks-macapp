@@ -367,7 +367,30 @@ export default function App() {
     return counts;
   }, [allBookmarks]);
 
+  /**
+   * Source counts follow the read scope.
+   *
+   * On Unread Only, "X 3,233" was answering a question nobody asked: you had
+   * already said you only wanted unread, so the number beside each source has
+   * to be the unread one or it doesn't describe what clicking it would show.
+   * On All Bookmarks it is the total again.
+   *
+   * Categories and favourite folders are left alone deliberately — those are
+   * ways of grouping the whole collection, and a folder that read "0" every
+   * time you switched to unread would look broken rather than filtered.
+   */
   const sourceCounts = useMemo(() => {
+    const counts = {};
+    allBookmarks.forEach(b => {
+      if (showUnreadOnly && readIds.has(b.id)) return;
+      const s = b.source || 'x';
+      counts[s] = (counts[s] || 0) + 1;
+    });
+    return counts;
+  }, [allBookmarks, showUnreadOnly, readIds]);
+
+  /** Totals, regardless of scope — for deciding whether a source is empty. */
+  const sourceTotals = useMemo(() => {
     const counts = {};
     allBookmarks.forEach(b => { const s = b.source || 'x'; counts[s] = (counts[s] || 0) + 1; });
     return counts;
@@ -714,6 +737,7 @@ export default function App() {
         favFolders={favFolders}
         folderCounts={folderCounts}
         sourceCounts={sourceCounts}
+        sourceTotals={sourceTotals}
         sourceFilter={sourceFilter}
         onSourceClick={handleSourceClick}
         onSourceAction={handleSourceAction}

@@ -10,7 +10,7 @@
     "tauri": "tauri",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
-    "test": "node --test server/*.test.js"
+    "test": "node --test server/*.test.js src/*.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

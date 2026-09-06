@@ -2873,13 +2873,23 @@ kbd {
    prominent than the thing beside it, which is backwards. */
 .sidebar-item.source-item.is-empty.active { color: var(--accent); }
 .sidebar-item.source-item.is-empty.active svg { opacity: 1; }
-.sidebar-item.source-item.is-empty.active .sidebar-badge { opacity: 1; color: var(--accent); }
+
+/* An active badge is already filled with the accent by the base rule above, so
+   its contents have to be the contrast colour. Painting them accent-on-accent
+   is what made a selected source's count vanish — a blue circle with an
+   invisible number in it. Applies to the count and the ✕ alike. */
+.sidebar-item.source-item.active .sidebar-badge,
+.sidebar-item.source-item.active .sidebar-badge .src-count,
+.sidebar-item.source-item.active .sidebar-badge .src-add {
+  opacity: 1;
+  color: #fff;
+}
 
 /* Clearing a source reads as a dismissal, not a destination. */
 .sidebar-badge.src-action.is-clear { border-color: var(--accent); }
 .source-item.active .src-action.is-clear .src-count { display: inline; }
 .source-item.active .src-action.is-clear:hover .src-count { display: none; }
-.source-item.active .src-action.is-clear:hover .src-add { display: inline; color: var(--accent); }
+.source-item.active .src-action.is-clear:hover .src-add { display: inline; }
 
 /* A source with no second tab still wants its count somewhere. */
 .source-view-count {
@@ -2929,3 +2939,66 @@ kbd {
 /* The AI button reads as its own kind of action, not another toggle. */
 .tw-btn.ai-btn { color: var(--accent); }
 .tw-btn.ai-btn:hover { color: var(--accent-hover); background: rgba(55, 180, 255, 0.12); }
+
+/* ── Rendered Markdown in chat answers ─────────────────────────────────────── */
+/*
+   The models answer in Markdown whether asked to or not, so this is the
+   difference between a wall of asterisks and something you can read. Sizes are
+   set against the body text rather than in px, so the whole block scales as one
+   thing.
+*/
+.chat-assistant-text.md {
+  font-size: 14.5px;
+  line-height: 1.68;
+  color: var(--text-primary);
+}
+
+.chat-assistant-text.md > *:first-child { margin-top: 0; }
+.chat-assistant-text.md > *:last-child  { margin-bottom: 0; }
+
+.chat-assistant-text.md p { margin: 0 0 0.95em; }
+
+.chat-assistant-text.md h3,
+.chat-assistant-text.md h4,
+.chat-assistant-text.md h5,
+.chat-assistant-text.md h6 {
+  margin: 1.3em 0 0.5em;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+}
+
+.chat-assistant-text.md strong { font-weight: 680; color: var(--text-primary); }
+.chat-assistant-text.md em { font-style: italic; }
+
+.chat-assistant-text.md a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(55, 180, 255, 0.32);
+}
+.chat-assistant-text.md a:hover {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent-hover);
+}
+
+.chat-assistant-text.md ul,
+.chat-assistant-text.md ol { margin: 0 0 0.95em; padding-left: 1.35em; }
+.chat-assistant-text.md li { margin-bottom: 0.32em; }
+.chat-assistant-text.md li::marker { color: var(--text-tertiary); }
+
+.chat-assistant-text.md code {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+}
+
+.chat-assistant-text.md blockquote {
+  margin: 0 0 0.95em;
+  padding: 2px 0 2px 14px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-secondary);
+}

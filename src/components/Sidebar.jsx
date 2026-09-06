@@ -27,7 +27,7 @@ export default function Sidebar({
   showUnreadOnly, onToggleUnread,
   catCounts, selectedCategories, onToggleCategory, onClearCategories,
   favMap, favFolders, folderCounts, onRenameFavFolder,
-  sourceCounts = {},
+  sourceCounts = {}, sourceTotals = {},
   sourceFilter, onSourceClick, onSourceAction,
   syncSource,
 }) {
@@ -129,7 +129,10 @@ export default function Sidebar({
         {SOURCE_ORDER.map(id => {
           const src = getBookmarkSource(id);
           const count = sourceCounts[id] || 0;
-          const empty = count === 0;
+          // "Empty" means the source holds nothing at all, not that nothing in
+          // it is unread. Otherwise reading your last YouTube video would grey
+          // the row out and re-offer you "Add", as though the videos were gone.
+          const empty = (sourceTotals[id] ?? count) === 0;
           const actionable = empty && Boolean(src.browseLabel);
           const selected = sourceFilter === id;
           return (

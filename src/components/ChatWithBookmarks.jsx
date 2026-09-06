@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { renderMarkdown } from '../markdown';
 import FavFolderPicker from './FavFolderPicker';
 
 const SUGGESTIONS = [
@@ -619,7 +620,10 @@ export default function ChatWithBookmarks({
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
                     </div>
                     <div className="chat-assistant-body">
-                      <p className="chat-assistant-text" style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</p>
+                      <div
+                        className="chat-assistant-text md"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
+                      />
                       <ChatResults
                         items={msg.sources}
                         favMap={favMap}
@@ -641,7 +645,13 @@ export default function ChatWithBookmarks({
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
                   </div>
                   <div className="chat-assistant-body">
-                    <p className="chat-assistant-text" style={{ whiteSpace: 'pre-wrap' }}>{splitSources(streaming).text}<span className="chat-cursor" /></p>
+                    {/* Rendered while streaming too, so the answer doesn't
+                        visibly reflow from raw asterisks into formatting at the
+                        moment it finishes. */}
+                    <div className="chat-assistant-text md">
+                      <span dangerouslySetInnerHTML={{ __html: renderMarkdown(splitSources(streaming).text) }} />
+                      <span className="chat-cursor" />
+                    </div>
                   </div>
                 </div>
               </div>

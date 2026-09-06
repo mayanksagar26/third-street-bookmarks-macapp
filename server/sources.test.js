@@ -19,6 +19,8 @@ const yt = require('./ingest/youtube');
 const ytTakeout = require('./ingest/youtube-takeout');
 const instagram = require('./ingest/instagram');
 const { canonical } = require('./ingest/link');
+const { buildAgentArgs, CLAUDE_DENIED_TOOLS } = require('./agent-run');
+const { safeUploadName } = require('./security');
 
 function tmpdir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'tsb-test-'));
@@ -275,4 +277,86 @@ test('the same video shared two ways canonicalises the same', () => {
     yt.videoId('https://youtu.be/abc_-123XYZ?si=one'),
     yt.videoId('https://www.youtube.com/watch?v=abc_-123XYZ&t=90'),
   );
+});
+
+
+// ── Agent permissions ────────────────────────────────────────────────────────
+//
+// Every prompt this app builds contains text a stranger wrote, so which tools
+// the CLI is refused is the part of the security model that actually holds.
+// A regression here is silent and only visible in a shell history.
+
+test('the default call denies every capability that reaches out or writes', () => {
+  const args = buildAgentArgs('claude', 'hi');
+  for (const tool of ['Bash', 'Write', 'Edit', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Task']) {
+    assert.ok(args.includes(tool), `${tool} should be denied by default`);
+  }
+});
+
+test('opting into web opens WebSearch and nothing else', () => {
+  const args = buildAgentArgs('claude', 'hi', { web: true });
+  assert.ok(!args.includes('WebSearch'), 'WebSearch is what web:true is for');
+  // The one that matters: a fetch goes to a URL an attacker picks, a search
+  // query goes to a search engine and comes back as results.
+  assert.ok(args.includes('WebFetch'), 'WebFetch must stay denied even with web:true');
+  for (const tool of ['Bash', 'Write', 'Edit', 'Task']) {
+    assert.ok(args.includes(tool), `${tool} must stay denied with web:true`);
+  }
+});
+
+test('the prompt is passed as text, not parsed as flags', () => {
+  const args = buildAgentArgs('claude', '--help me');
+  assert.equal(args[args.length - 2], '--', 'the terminator precedes the prompt');
+  assert.equal(args[args.length - 1], '--help me');
+});
+
+test('codex stays read-only regardless of the web flag', () => {
+  const plain = buildAgentArgs('codex', 'hi');
+  const web = buildAgentArgs('codex', 'hi', { web: true });
+  assert.deepEqual(plain, web);
+  assert.ok(plain.includes('read-only'));
+});
+
+
+// ── Uploaded export file names ───────────────────────────────────────────────
+//
+// This route writes files to disk from a name the browser supplied, so the
+// sanitiser is the only thing standing between an upload and an arbitrary
+// write. Everything it rejects, it must reject by refusing rather than by
+// rewriting — a rewritten name is a name someone can still steer.
+
+test('a bare name with the right extension passes through', () => {
+  assert.equal(safeUploadName('saved_posts.json', ['.json']), 'saved_posts.json');
+  assert.equal(safeUploadName('Watch later-videos.csv', ['.csv']), 'Watch later-videos.csv');
+});
+
+test('traversal cannot escape the import directory', () => {
+  assert.equal(safeUploadName('../../../.ssh/authorized_keys.json', ['.json']), 'authorized_keys.json');
+  assert.equal(safeUploadName('..\\..\\windows\\evil.json', ['.json']), 'evil.json');
+});
+
+test('an absolute path is reduced to its basename', () => {
+  assert.equal(safeUploadName('/etc/passwd.json', ['.json']), 'passwd.json');
+});
+
+test('a webkitdirectory relative path keeps only the file', () => {
+  assert.equal(safeUploadName('Takeout/YouTube/playlists/Likes.csv', ['.csv']), 'Likes.csv');
+});
+
+test('the wrong extension is refused, not corrected', () => {
+  assert.throws(() => safeUploadName('payload.sh', ['.json']), /not a \.json file/);
+  assert.throws(() => safeUploadName('notes.csv', ['.json']), /not a \.json file/);
+  assert.throws(() => safeUploadName('noextension', ['.json']));
+});
+
+test('shell metacharacters in a name are refused', () => {
+  assert.throws(() => safeUploadName('a;rm -rf ~.json', ['.json']), /Unusual file name/);
+  assert.throws(() => safeUploadName('$(whoami).json', ['.json']), /Unusual file name/);
+  assert.throws(() => safeUploadName('a`id`.json', ['.json']), /Unusual file name/);
+});
+
+test('empty and dot names are refused', () => {
+  for (const bad of ['', null, undefined, '.', '..', '   ']) {
+    assert.throws(() => safeUploadName(bad, ['.json']));
+  }
 });

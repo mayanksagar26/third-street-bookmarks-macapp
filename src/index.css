@@ -2873,13 +2873,23 @@ kbd {
    prominent than the thing beside it, which is backwards. */
 .sidebar-item.source-item.is-empty.active { color: var(--accent); }
 .sidebar-item.source-item.is-empty.active svg { opacity: 1; }
-.sidebar-item.source-item.is-empty.active .sidebar-badge { opacity: 1; color: var(--accent); }
+
+/* An active badge is already filled with the accent by the base rule above, so
+   its contents have to be the contrast colour. Painting them accent-on-accent
+   is what made a selected source's count vanish — a blue circle with an
+   invisible number in it. Applies to the count and the ✕ alike. */
+.sidebar-item.source-item.active .sidebar-badge,
+.sidebar-item.source-item.active .sidebar-badge .src-count,
+.sidebar-item.source-item.active .sidebar-badge .src-add {
+  opacity: 1;
+  color: #fff;
+}
 
 /* Clearing a source reads as a dismissal, not a destination. */
 .sidebar-badge.src-action.is-clear { border-color: var(--accent); }
 .source-item.active .src-action.is-clear .src-count { display: inline; }
 .source-item.active .src-action.is-clear:hover .src-count { display: none; }
-.source-item.active .src-action.is-clear:hover .src-add { display: inline; color: var(--accent); }
+.source-item.active .src-action.is-clear:hover .src-add { display: inline; }
 
 /* A source with no second tab still wants its count somewhere. */
 .source-view-count {
@@ -2896,3 +2906,135 @@ kbd {
 /* Without tabs the feed sits straight under the header, so it needs the gap
    the tab strip used to provide. */
 .source-view:not(:has(.source-tabs)) .source-view-head { padding-bottom: 12px; }
+
+/* ── Long text: clamp, then let the reader ask for the rest ────────────────── */
+/*
+   An imported YouTube description runs to several hundred words of links and
+   chapter markers, and a Hacker News post can be an essay. Rendered in full
+   they push every other card off the screen, so one long item costs you the
+   scan the feed exists to provide.
+*/
+.tweet-text.is-clamped {
+  max-height: 15.5em;
+  overflow: hidden;
+  /* Fade rather than a hard cut, so it reads as "continues" and not as text
+     that happens to end mid-sentence. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 74%, transparent 100%);
+          mask-image: linear-gradient(to bottom, #000 74%, transparent 100%);
+}
+
+.tweet-more {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.tweet-more:hover { text-decoration: underline; }
+
+/* The AI button reads as its own kind of action, not another toggle. */
+.tw-btn.ai-btn { color: var(--accent); }
+.tw-btn.ai-btn:hover { color: var(--accent-hover); background: rgba(55, 180, 255, 0.12); }
+
+/* ── Rendered Markdown in chat answers ─────────────────────────────────────── */
+/*
+   The models answer in Markdown whether asked to or not, so this is the
+   difference between a wall of asterisks and something you can read. Sizes are
+   set against the body text rather than in px, so the whole block scales as one
+   thing.
+*/
+.chat-assistant-text.md {
+  font-size: 14.5px;
+  line-height: 1.68;
+  color: var(--text-primary);
+}
+
+.chat-assistant-text.md > *:first-child { margin-top: 0; }
+.chat-assistant-text.md > *:last-child  { margin-bottom: 0; }
+
+.chat-assistant-text.md p { margin: 0 0 0.95em; }
+
+.chat-assistant-text.md h3,
+.chat-assistant-text.md h4,
+.chat-assistant-text.md h5,
+.chat-assistant-text.md h6 {
+  margin: 1.3em 0 0.5em;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--text-primary);
+}
+
+.chat-assistant-text.md strong { font-weight: 680; color: var(--text-primary); }
+.chat-assistant-text.md em { font-style: italic; }
+
+.chat-assistant-text.md a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(55, 180, 255, 0.32);
+}
+.chat-assistant-text.md a:hover {
+  color: var(--accent-hover);
+  border-bottom-color: var(--accent-hover);
+}
+
+.chat-assistant-text.md ul,
+.chat-assistant-text.md ol { margin: 0 0 0.95em; padding-left: 1.35em; }
+.chat-assistant-text.md li { margin-bottom: 0.32em; }
+.chat-assistant-text.md li::marker { color: var(--text-tertiary); }
+
+.chat-assistant-text.md code {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+}
+
+.chat-assistant-text.md blockquote {
+  margin: 0 0 0.95em;
+  padding: 2px 0 2px 14px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-secondary);
+}
+
+/* ── Choosing an export instead of typing where it lives ───────────────────── */
+
+.add-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 22px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 11px;
+  background: var(--bg-solid);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s;
+}
+.add-drop:hover, .add-drop.over { border-color: var(--accent); background: rgba(55, 180, 255, 0.06); }
+.add-drop strong { color: var(--accent); font-weight: 650; }
+.add-drop span { color: var(--text-tertiary); font-size: 12px; }
+.add-drop.is-busy { opacity: 0.6; cursor: default; }
+
+/* The path field is the fallback, so it starts folded rather than competing
+   with the picker for the same job. */
+.add-path { margin-top: 12px; }
+.add-path summary {
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 12.5px;
+  list-style: none;
+}
+.add-path summary::-webkit-details-marker { display: none; }
+.add-path summary::before { content: '▸ '; }
+.add-path[open] summary::before { content: '▾ '; }
+.add-path summary:hover { color: var(--text-secondary); }

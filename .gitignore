@@ -11,6 +11,7 @@ settings.json
 # app-owned state DB. A standalone `node server/index.js` writes these into the
 # repo root, since that is its data directory when Tauri isn't setting one.
 sources/
+imports/
 state.db
 state.db-journal
 

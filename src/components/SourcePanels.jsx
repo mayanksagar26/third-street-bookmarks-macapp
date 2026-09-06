@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SourceIcon } from '../bookmark-sources';
 import { openExternal } from '../external-links';
 
@@ -23,12 +23,16 @@ export function Result({ result }) {
  * Read the file, show what's inside, import only what's ticked. Choosing three
  * collections is the whole reason to prefer an export over a live scrape.
  */
-export function ExportImporter({ endpoint, extLabel, placeholder, onImported }) {
+export function ExportImporter({ endpoint, source, accept, extLabel, placeholder, onImported }) {
   const [path, setPath]        = useState('');
   const [collections, setColl] = useState(null);
   const [picked, setPicked]    = useState(new Set());
   const [busy, setBusy]        = useState(false);
   const [result, setResult]    = useState(null);
+  // Where the files being read came from. An upload lives in the app's own
+  // directory, so the server addresses it rather than trusting a path.
+  const [uploaded, setUploaded] = useState(null);
+  const fileRef = useRef(null);
 
   async function post(body) {
     const r = await fetch(endpoint, {
@@ -41,13 +45,49 @@ export function ExportImporter({ endpoint, extLabel, placeholder, onImported }) 
     return d;
   }
 
-  async function scan() {
+  /** What the two Read paths have in common once the files are locatable. */
+  async function preview(body) {
+    const d = await post(body);
+    setColl(d.collections);
+    setPicked(new Set(Object.keys(d.collections)));
+    if (!Object.keys(d.collections).length) setResult({ error: 'Nothing importable found in there.' });
+  }
+
+  /**
+   * Read the picked files in the browser and hand their text to the server.
+   *
+   * The webview cannot give a real filesystem path for a chosen file, and the
+   * import needs the contents anyway — so they are read here and written into
+   * the app's data directory, which is also what makes the export re-readable
+   * later without asking you to find it again.
+   */
+  async function upload(fileList) {
+    const files = [...(fileList || [])].filter(f => accept.some(ext => f.name.toLowerCase().endsWith(ext)));
+    if (!files.length) {
+      setResult({ error: `Pick the ${accept.join(' or ')} files from the unzipped export.` });
+      return;
+    }
     setBusy(true); setResult(null); setColl(null);
     try {
-      const d = await post({ path: path.trim() });
-      setColl(d.collections);
-      setPicked(new Set(Object.keys(d.collections)));
-      if (!Object.keys(d.collections).length) setResult({ error: 'Nothing importable found in there.' });
+      const payload = await Promise.all(files.map(async f => ({ name: f.name, content: await f.text() })));
+      const r = await fetch('/api/import/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, files: payload }),
+      });
+      const up = await r.json();
+      if (!r.ok) throw new Error(up.error || 'upload failed');
+      setUploaded(up.dir);
+      setPath('');
+      await preview({ uploaded: true });
+    } catch (e) { setResult({ error: e.message }); }
+    finally { setBusy(false); }
+  }
+
+  async function scan() {
+    setBusy(true); setResult(null); setColl(null); setUploaded(null);
+    try {
+      await preview({ path: path.trim() });
     } catch (e) { setResult({ error: e.message }); }
     finally { setBusy(false); }
   }
@@ -55,7 +95,7 @@ export function ExportImporter({ endpoint, extLabel, placeholder, onImported }) 
   async function run() {
     setBusy(true); setResult(null);
     try {
-      const d = await post({ path: path.trim(), only: [...picked] });
+      const d = await post(uploaded ? { uploaded: true, only: [...picked] } : { path: path.trim(), only: [...picked] });
       setResult({ text: `Imported ${d.added} new · ${d.skipped} already saved.` });
       onImported?.();
     } catch (e) { setResult({ error: e.message }); }
@@ -73,18 +113,51 @@ export function ExportImporter({ endpoint, extLabel, placeholder, onImported }) 
   return (
     <div className="add-block">
       <label className="add-label">{extLabel}</label>
-      <div className="add-row">
+
+      {/* Choosing the files is the way in; typing a path is the fallback for
+          when the export lives somewhere a picker is awkward to reach. */}
+      <div
+        className={`add-drop ${busy ? 'is-busy' : ''}`}
+        onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('over'); }}
+        onDragLeave={e => e.currentTarget.classList.remove('over')}
+        onDrop={e => {
+          e.preventDefault();
+          e.currentTarget.classList.remove('over');
+          upload(e.dataTransfer.files);
+        }}
+        onClick={() => !busy && fileRef.current?.click()}
+      >
         <input
-          className="add-input"
-          placeholder={placeholder}
-          value={path}
-          onChange={e => { setPath(e.target.value); setColl(null); }}
-          onKeyDown={e => { if (e.key === 'Enter' && path.trim()) scan(); }}
+          ref={fileRef}
+          type="file"
+          multiple
+          accept={accept.join(',')}
+          hidden
+          onChange={e => { upload(e.target.files); e.target.value = ''; }}
         />
-        <button className="add-btn" onClick={scan} disabled={busy || !path.trim()}>
-          {busy && !collections ? 'Reading…' : 'Read'}
-        </button>
+        <strong>Choose files</strong> or drop them here
+        <span>{accept.join(' / ')} from the unzipped export</span>
       </div>
+
+      {uploaded && (
+        <div className="add-hint">Saved into the app’s own folder, so you won’t have to find them again.</div>
+      )}
+
+      <details className="add-path">
+        <summary>Or point at a folder on disk</summary>
+        <div className="add-row" style={{ marginTop: 8 }}>
+          <input
+            className="add-input"
+            placeholder={placeholder}
+            value={path}
+            onChange={e => { setPath(e.target.value); setColl(null); }}
+            onKeyDown={e => { if (e.key === 'Enter' && path.trim()) scan(); }}
+          />
+          <button className="add-btn" onClick={scan} disabled={busy || !path.trim()}>
+            {busy && !collections ? 'Reading…' : 'Read'}
+          </button>
+        </div>
+      </details>
 
       {collections && Object.keys(collections).length > 0 && (
         <>
@@ -233,6 +306,8 @@ export function YouTubeImport({ onAdded }) {
 
       <ExportImporter
         endpoint="/api/import/youtube"
+        source="yt"
+        accept={['.csv']}
         extLabel="Google Takeout — playlists, Liked, Watch Later"
         placeholder="~/Downloads/Takeout/YouTube and YouTube Music"
         onImported={onAdded}
@@ -284,6 +359,8 @@ export function InstagramImport({ onAdded }) {
 
       <ExportImporter
         endpoint="/api/import/instagram"
+        source="ig"
+        accept={['.json']}
         extLabel="Step 2 — import the unzipped export"
         placeholder="~/Downloads/instagram-yourname-2026-09-05"
         onImported={onAdded}

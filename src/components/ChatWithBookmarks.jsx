@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { renderMarkdown } from '../markdown';
 import FavFolderPicker from './FavFolderPicker';
 
 const SUGGESTIONS = [
@@ -339,6 +340,7 @@ function loadSystemPrompt() {
 export default function ChatWithBookmarks({
   bookmarks, aiBackend: initialBackend, onClose,
   favMap, favFolders, onSetFavFolders, onRenameFavFolder,
+  explainTarget, onExplainConsumed,
 }) {
   // Built once per collection, not per question: indexing a few thousand
   // bookmarks costs tens of milliseconds, searching one costs under three.
@@ -440,6 +442,74 @@ export default function ChatWithBookmarks({
       setLoading(false);
     }
   }
+
+  /**
+   * The AI button on a card lands here.
+   *
+   * Deliberately not routed through `sendQuery`. That path searches the whole
+   * collection for what you might have meant; here the subject is already known
+   * exactly, so guessing at it would only add noise. The server builds the
+   * prompt — the fencing has to wrap content the client cannot choose — and
+   * this request is the one allowed to search the web.
+   */
+  async function runExplain(bm) {
+    if (loading) return;
+    const label = bm.title || (bm.text || '').slice(0, 90) || bm.url || 'this bookmark';
+    setMessages(prev => [...prev, { role: 'user', text: `Explain: ${label}` }]);
+    setLoading(true);
+    setStreaming('');
+    relevantRef.current = { items: [bm], matched: true, terms: [], missing: [], total: 1 };
+
+    try {
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      const resp = await fetch('/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: bm.id }),
+        signal: ctrl.signal,
+      });
+      if (!resp.ok) {
+        const d = await resp.json().catch(() => ({}));
+        throw new Error(d.error || `Server error ${resp.status}`);
+      }
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let full = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        full += decoder.decode(value, { stream: true });
+        setStreaming(full);
+      }
+      const { text } = splitSources(full);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        type: 'text',
+        text: text.trim() || 'No response from AI. Make sure the CLI is installed and authenticated.',
+        // The bookmark itself is the source, always — you asked about this one.
+        sources: [bm],
+      }]);
+      setStreaming('');
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        setMessages(prev => [...prev, {
+          role: 'assistant', type: 'text',
+          text: `Error: ${e.message}. Make sure ${aiBackend === 'codex' ? 'Codex' : 'Claude Code'} CLI is installed and authenticated.`,
+        }]);
+        setStreaming('');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // `at` changes on every press, so asking twice about the same card asks twice.
+  useEffect(() => {
+    if (!explainTarget?.bookmark) return;
+    runExplain(explainTarget.bookmark);
+    onExplainConsumed?.();
+  }, [explainTarget?.at]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleStop() {
     abortRef.current?.abort();
@@ -550,7 +620,10 @@ export default function ChatWithBookmarks({
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
                     </div>
                     <div className="chat-assistant-body">
-                      <p className="chat-assistant-text" style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</p>
+                      <div
+                        className="chat-assistant-text md"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.text) }}
+                      />
                       <ChatResults
                         items={msg.sources}
                         favMap={favMap}
@@ -572,7 +645,13 @@ export default function ChatWithBookmarks({
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
                   </div>
                   <div className="chat-assistant-body">
-                    <p className="chat-assistant-text" style={{ whiteSpace: 'pre-wrap' }}>{splitSources(streaming).text}<span className="chat-cursor" /></p>
+                    {/* Rendered while streaming too, so the answer doesn't
+                        visibly reflow from raw asterisks into formatting at the
+                        moment it finishes. */}
+                    <div className="chat-assistant-text md">
+                      <span dangerouslySetInnerHTML={{ __html: renderMarkdown(splitSources(streaming).text) }} />
+                      <span className="chat-cursor" />
+                    </div>
                   </div>
                 </div>
               </div>

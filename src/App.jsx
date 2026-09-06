@@ -70,6 +70,9 @@ export default function App() {
   const [settingsOpen, setSettingsOpen]         = useState(false);
   // Which tab the add pane opens on when a source row sends you there.
   const [addTab, setAddTab]                     = useState('paste');
+  // The bookmark the AI button was pressed on, handed to the chat pane so it
+  // can open already asking about it.
+  const [explainTarget, setExplainTarget]       = useState(null);
   // Source is its own axis, not another value of `currentFilter`.
   //
   // While they shared one variable, picking a source *replaced* "All Bookmarks"
@@ -364,7 +367,30 @@ export default function App() {
     return counts;
   }, [allBookmarks]);
 
+  /**
+   * Source counts follow the read scope.
+   *
+   * On Unread Only, "X 3,233" was answering a question nobody asked: you had
+   * already said you only wanted unread, so the number beside each source has
+   * to be the unread one or it doesn't describe what clicking it would show.
+   * On All Bookmarks it is the total again.
+   *
+   * Categories and favourite folders are left alone deliberately — those are
+   * ways of grouping the whole collection, and a folder that read "0" every
+   * time you switched to unread would look broken rather than filtered.
+   */
   const sourceCounts = useMemo(() => {
+    const counts = {};
+    allBookmarks.forEach(b => {
+      if (showUnreadOnly && readIds.has(b.id)) return;
+      const s = b.source || 'x';
+      counts[s] = (counts[s] || 0) + 1;
+    });
+    return counts;
+  }, [allBookmarks, showUnreadOnly, readIds]);
+
+  /** Totals, regardless of scope — for deciding whether a source is empty. */
+  const sourceTotals = useMemo(() => {
     const counts = {};
     allBookmarks.forEach(b => { const s = b.source || 'x'; counts[s] = (counts[s] || 0) + 1; });
     return counts;
@@ -658,6 +684,18 @@ export default function App() {
     openSource(id, 'browse');
   }, [openSource]);
 
+  /**
+   * The AI button on a card.
+   *
+   * Opens the chat pane already asking about that bookmark, rather than
+   * dropping you into an empty prompt you then have to describe the thing in.
+   * A fresh object each time so pressing it twice on the same card asks again.
+   */
+  const handleExplain = useCallback((bm) => {
+    setExplainTarget({ bookmark: bm, at: Date.now() });
+    setActiveMode('chat');
+  }, []);
+
   // One definition, two mount points: the ordinary feed, and the Saved tab
   // inside a source view. Duplicating twenty props across both is how one of
   // them quietly loses a handler.
@@ -674,6 +712,7 @@ export default function App() {
     onBulkRead: handleBulkRead,
     onPageChange: (p) => { setCurrentPage(p); setFocusedIdx(-1); },
     onSpeakBookmark: (bm) => handleTtsSpeak(`From ${bm.authorName || bm.authorHandle}: ${cleanForVoice(bm.text)}`),
+    onExplain: handleExplain,
   };
 
   const handleVoiceClick = useCallback((handle) => {
@@ -698,6 +737,7 @@ export default function App() {
         favFolders={favFolders}
         folderCounts={folderCounts}
         sourceCounts={sourceCounts}
+        sourceTotals={sourceTotals}
         sourceFilter={sourceFilter}
         onSourceClick={handleSourceClick}
         onSourceAction={handleSourceAction}
@@ -709,6 +749,8 @@ export default function App() {
           <ChatWithBookmarks
             bookmarks={allBookmarks}
             aiBackend={aiBackend}
+            explainTarget={explainTarget}
+            onExplainConsumed={() => setExplainTarget(null)}
             favMap={favMap}
             favFolders={favFolders}
             onSetFavFolders={handleSetFavFolders}

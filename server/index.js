@@ -5,7 +5,7 @@ const os = require('os');
 const { spawn } = require('child_process');
 const { detectRuntimes, findBinary } = require('./agents');
 const { discover } = require('./discover');
-const { agentEnv, buildAgentArgs } = require('./agent-run');
+const { agentEnv, buildAgentArgs, fenceUntrusted } = require('./agent-run');
 const store = require('./sources-store');
 const hn = require('./ingest/hn');
 const yt = require('./ingest/youtube');
@@ -17,6 +17,7 @@ const {
   createGuard,
   resolveToken,
   securityHeaders,
+  safeUploadName,
   validateBookmarkPath,
   validateImportPath,
   validatePrompt,
@@ -743,6 +744,64 @@ app.post('/api/youtube/playlist', async (req, res) => {
   }
 });
 
+// ── Uploading an export ───────────────────────────────────────────────────────
+//
+// Typing a path works, but only once you know what a path is and where macOS
+// put the unzip. Picking the files is the same job without that step.
+//
+// Uploaded files land in the app's own data directory beside everything else it
+// owns — `~/.tsb/imports/<source>/` next to `sources/`, `state.db` and
+// `settings.json`. That directory is the database; the repo is not. Nothing an
+// import writes should ever land somewhere a `git status` would notice.
+
+/** What each source is allowed to send, and how much of it. */
+const UPLOAD_KINDS = {
+  ig: { ext: ['.json'], label: 'Instagram export' },
+  yt: { ext: ['.csv'],  label: 'Takeout playlists' },
+};
+const UPLOAD_MAX_FILES = 60;
+const UPLOAD_MAX_BYTES = 32 * 1024 * 1024;
+
+app.post('/api/import/upload', (req, res) => {
+  const source = String(req.body?.source || '');
+  const kind = UPLOAD_KINDS[source];
+  if (!kind) return res.status(400).json({ error: 'Unknown import source' });
+
+  const files = Array.isArray(req.body?.files) ? req.body.files : [];
+  if (!files.length) return res.status(400).json({ error: 'No files selected' });
+  if (files.length > UPLOAD_MAX_FILES) {
+    return res.status(400).json({ error: `Too many files — ${UPLOAD_MAX_FILES} at most` });
+  }
+
+  let total = 0;
+  const staged = [];
+  try {
+    for (const f of files) {
+      const name = safeUploadName(f?.name, kind.ext);
+      const content = typeof f?.content === 'string' ? f.content : '';
+      total += Buffer.byteLength(content, 'utf8');
+      if (total > UPLOAD_MAX_BYTES) throw new Error('That export is larger than 32 MB');
+      staged.push({ name, content });
+    }
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+
+  const dir = path.join(DATA_DIR, 'imports', source);
+  try {
+    // Replace rather than merge. An upload means "this is my export now", and
+    // leaving last month's files behind would resurrect posts you have since
+    // unsaved, with no way to tell where they came from.
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+    for (const f of staged) fs.writeFileSync(path.join(dir, f.name), f.content);
+  } catch (e) {
+    return res.status(500).json({ error: `Could not save the upload: ${e.message}` });
+  }
+
+  res.json({ ok: true, dir, files: staged.map(f => f.name) });
+});
+
 // ── Instagram (official export) ───────────────────────────────────────────────
 // Where to go to request it. Surfaced by the server so the button in the UI and
 // the docs can never drift apart.
@@ -760,7 +819,14 @@ app.get('/api/instagram/download-urls', (req, res) => res.json(instagram.DOWNLOA
 app.post('/api/import/instagram', (req, res) => {
   let target;
   try {
-    target = validateImportPath(req.body?.path, { extensions: ['.json'], allowDir: true });
+    // An `uploaded: true` request means the files came through /api/import/upload
+    // and already live in the app's own directory, so the home-scoped validator
+    // — which exists to stop this endpoint reading arbitrary user files — has
+    // nothing to check. The path is ours, not theirs.
+    target = req.body?.uploaded
+      ? path.join(DATA_DIR, 'imports', 'ig')
+      : validateImportPath(req.body?.path, { extensions: ['.json'], allowDir: true });
+    if (!fs.existsSync(target)) throw new Error('Nothing uploaded yet');
   } catch (e) {
     return res.status(400).json({ error: e.message });
   }
@@ -779,7 +845,14 @@ app.post('/api/import/instagram', (req, res) => {
 app.post('/api/import/youtube', async (req, res) => {
   let target;
   try {
-    target = validateImportPath(req.body?.path, { extensions: ['.csv'], allowDir: true });
+    // An `uploaded: true` request means the files came through /api/import/upload
+    // and already live in the app's own directory, so the home-scoped validator
+    // — which exists to stop this endpoint reading arbitrary user files — has
+    // nothing to check. The path is ours, not theirs.
+    target = req.body?.uploaded
+      ? path.join(DATA_DIR, 'imports', 'yt')
+      : validateImportPath(req.body?.path, { extensions: ['.csv'], allowDir: true });
+    if (!fs.existsSync(target)) throw new Error('Nothing uploaded yet');
   } catch (e) {
     return res.status(400).json({ error: e.message });
   }
@@ -1079,6 +1152,74 @@ const CATEGORIES = [
   'travel','sports','books','food','history','self-improvement','community',
   'leadership','marketing','policy','science','misc',
 ];
+
+/**
+ * Explain one bookmark.
+ *
+ * The prompt is built here rather than accepted from the client, for two
+ * reasons. The fencing has to wrap content the caller cannot choose, or it
+ * protects nothing. And the elevated `WebSearch` permission is granted per
+ * request, so the request had better describe a bookmark that actually exists
+ * rather than arbitrary text someone posted to the port.
+ */
+app.post('/api/explain', (req, res) => {
+  const id = String(req.body?.id || '');
+  let bm;
+  try {
+    bm = readBookmarks().find(b => b.id === id || b.tweetId === id);
+  } catch {
+    return res.status(500).json({ error: 'could not read the collection' });
+  }
+  if (!bm) return res.status(404).json({ error: 'No such bookmark' });
+
+  const settings = readSettings();
+  const backend = settings.aiBackend || 'claude';
+  // Opt-out lives in settings; the button asks for it, the user can refuse.
+  const web = settings.aiWebSearch !== false;
+
+  const facts = [
+    bm.title ? `Title: ${bm.title}` : null,
+    bm.authorName || bm.authorHandle ? `Author: ${bm.authorName || ''} ${bm.authorHandle ? `(@${bm.authorHandle})` : ''}`.trim() : null,
+    `Source: ${bm.sourceLabel || bm.source || 'X'}`,
+    bm.url ? `URL: ${bm.url}` : null,
+    bm.postedAt ? `Posted: ${bm.postedAt}` : null,
+    bm.points ? `Hacker News points: ${bm.points}` : null,
+  ].filter(Boolean).join('\n');
+
+  const prompt = [
+    'You are explaining one saved bookmark to the person who saved it.',
+    '',
+    fenceUntrusted('bookmark', `${facts}\n\n${(bm.text || '').slice(0, 6000)}`),
+    '',
+    'Write a short brief, in this order and with these headings:',
+    '',
+    '**What it is** — one or two sentences, plainly.',
+    '**Why it matters** — the point a reader would take away.',
+    '**Context** — what has happened around this since, or what a reader needs',
+    'to know to place it. Say plainly if you are unsure.',
+    '',
+    web
+      ? 'You may use WebSearch to check current context. Cite what you found by name.'
+      : 'Web search is switched off, so answer from the bookmark and what you already know.',
+    '',
+    'No preamble, no restating the task. Under 200 words. If the bookmark is too',
+    'thin to say anything useful, say exactly that instead of padding.',
+  ].join('\n');
+
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const cmd = backend === 'codex' ? 'codex' : 'claude';
+  const proc = spawn(cmd, buildAgentArgs(backend, prompt, { web }), { env: agentEnv(EXTRA_PATH) });
+  proc.stdout.on('data', d => { if (!res.writableEnded) res.write(d); });
+  proc.stderr.on('data', () => {});
+  proc.on('close', () => { if (!res.writableEnded) res.end(); });
+  proc.on('error', () => {
+    const msg = `\n\n⚠️ ${backend} CLI not found. Install it or switch AI backend in settings.`;
+    if (!res.writableEnded) { res.write(msg); res.end(); }
+  });
+});
 
 app.post('/api/classify-ai', (req, res) => {
   const settings = readSettings();

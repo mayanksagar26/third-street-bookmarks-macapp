@@ -587,3 +587,42 @@ test('saved_music is not treated as saved posts', () => {
   assert.ok(!files.includes('saved_music.html'), 'the music list is not a saved-posts file');
   assert.ok(!collections['Tracks']);
 });
+
+
+// ── Captions and authors from the HTML export ────────────────────────────────
+//
+// Without these an Instagram card is a bare link: no way to tell what you saved
+// or why. The export carries both, and dropping them on the floor was the
+// difference between a usable row and a boring one.
+
+test('the caption becomes the card body', () => {
+  const dir = writeIgHtml({
+    'saved_collections.html': igCollectionsHtml([['Keep', [['AAA111aaa', 'naval']]]]),
+  });
+  const rec = instagram.readExport(dir).records[0];
+  assert.equal(rec.text, 'some caption text');
+  assert.equal(rec.title, null, 'no "Instagram post" heading above the actual post');
+});
+
+test('the display name and the handle are kept apart', () => {
+  const dir = writeIgHtml({
+    'saved_collections.html': igCollectionsHtml([['Keep', [['AAA111aaa', 'techie007.dev']]]]),
+  });
+  const rec = instagram.readExport(dir).records[0];
+  assert.equal(rec.authorHandle, 'techie007.dev');
+  assert.equal(rec.authorName, 'Display Name');
+});
+
+test('a caption repeated for a multi-image post is taken once', () => {
+  // Instagram emits one Caption row per image. Taking the last would overwrite
+  // the first with identical text; taking every one would multiply the item.
+  const dir = writeIgHtml({
+    'saved_collections.html': igCollectionsHtml([['Keep', [['AAA111aaa', 'naval']]]])
+      .replace('<tr><td class="_a6_q">Caption</td>',
+               '<tr><td class="_a6_q">Caption</td><td class="_2piu _a6_r">some caption text</td></tr>' +
+               '<tr><td class="_a6_q">Caption</td>'),
+  });
+  const recs = instagram.readExport(dir).records;
+  assert.equal(recs.length, 1);
+  assert.equal(recs[0].text, 'some caption text');
+});

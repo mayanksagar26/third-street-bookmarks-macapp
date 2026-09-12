@@ -3038,3 +3038,193 @@ kbd {
 .add-path summary::before { content: '▸ '; }
 .add-path[open] summary::before { content: '▾ '; }
 .add-path summary:hover { color: var(--text-secondary); }
+
+/* ── Folder rows carry their source's mark ─────────────────────────────────── */
+.folder-marks { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.folder-marks svg { flex-shrink: 0; }
+.folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-item.folder-item .sidebar-item-left { min-width: 0; }
+
+/* Hacker News points read as a vote, not a like. */
+.tweet-action.points { color: #ff9d5c; }
+.tweet-action.duration { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+
+/* Only the folders whose name exists in two services carry the service name. */
+.folder-qualifier {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* ── Reading typeface ──────────────────────────────────────────────────────────
+   Bundled as latin woff2 subsets so the app renders the face you picked with no
+   network. `font-display: block` rather than `swap`: this is a preference you
+   set deliberately, and a flash of the system font on every launch would make
+   the setting look like it had not taken. */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Literata';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url('/fonts/literata-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Architects Daughter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('/fonts/architects-daughter-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
+}
+
+:root {
+  --app-font: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --app-font-scale: 1;
+}
+
+/* The content, not the chrome. A hand-drawn sidebar is a novelty; a hand-drawn
+   page of saved writing is a reading choice. */
+.tweet-text,
+.tweet-title,
+.quoted-tweet-text,
+.chat-assistant-text,
+.chat-bubble,
+.hn-story-title,
+.stats-observation p {
+  font-family: var(--app-font);
+  font-size: calc(1em * var(--app-font-scale));
+}
+
+/* The picker previews each face in itself — a name alone tells you nothing. */
+.font-choice-sample {
+  display: block;
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* "Sync & Classify" drives one source; the label should say so. */
+.panel-card-qualifier {
+  margin-left: 7px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* ── Note popup, restyled ──────────────────────────────────────────────────────
+   The wrapper exists so the popup can be positioned against the pencil while
+   being a *sibling* of it rather than a child — a textarea inside a <button> is
+   invalid HTML, and the browser's reading of it is that Space activates the
+   button, which closed the note on every space you typed. */
+
+.note-wrap { position: relative; display: inline-flex; }
+
+.note-popup {
+  width: 300px;
+  padding: 14px;
+  border-radius: 14px;
+  /* Right-anchored, but never off the left edge of a narrow card. */
+  right: 0;
+  animation: note-pop 0.13s ease-out;
+  transform-origin: top right;
+}
+@keyframes note-pop {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.note-popup-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+.note-popup-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+/* Whose bookmark this is attached to — three popups open in a long feed look
+   identical otherwise. */
+.note-popup-for {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.note-popup-textarea {
+  min-height: 84px;
+  padding: 10px 11px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  resize: none;
+}
+.note-popup-textarea::placeholder { color: var(--text-tertiary); }
+.note-popup-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(55, 180, 255, 0.14);
+}
+
+.note-popup-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.note-popup-hint {
+  flex: 1;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.note-popup-hint kbd {
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  font-family: inherit;
+  font-size: 10px;
+}
+.note-popup-save { padding: 6px 15px; transition: background 0.15s, opacity 0.15s; }
+/* Nothing changed, nothing to save — the button says so rather than pretending. */
+.note-popup-save:disabled { opacity: 0.4; cursor: default; background: var(--accent); }
+.note-popup-delete { transition: border-color 0.15s, color 0.15s; }
+.note-popup-delete:hover { border-color: var(--like); }
+
+/* The pencil stays lit while its note is open. */
+.tw-btn.note-btn.open { color: var(--accent); background: rgba(55, 180, 255, 0.12); }

@@ -1308,6 +1308,7 @@ app.post('/api/classify-ai', (req, res) => {
   if (!unclassified.length) return res.json({ ok: true, classified: 0, msg: 'Nothing to classify' });
 
   const batchSize = 20;
+  const assigned = [];
   let done = 0;
 
   function processBatch(i, callback) {
@@ -1336,7 +1337,12 @@ app.post('/api/classify-ai', (req, res) => {
             const cat = cats[idx];
             const valid = CATEGORIES.includes(cat) ? cat : 'misc';
             const bm = data.find(d => d.id === b.id);
-            if (bm) { bm.primaryCategory = valid; bm.categories = [valid]; }
+            if (bm) {
+              bm.primaryCategory = valid;
+              bm.categories = [valid];
+              const dbId = xDbId(bm);
+              if (dbId) assigned.push({ id: dbId, category: valid });
+            }
           });
           done += batch.length;
         } catch {}
@@ -1348,12 +1354,92 @@ app.post('/api/classify-ai', (req, res) => {
 
   processBatch(0, () => {
     try { writeBookmarks(data); } catch {}
+    // Into SQLite as well: this endpoint is how the backlog gets cleared, and a
+    // label that lives only in bookmarks.json is undone by the next export.
+    saveCategoriesToDb(assigned);
     res.json({ ok: true, classified: done });
   });
 });
 
 // ── Sync & Classify ───────────────────────────────────────────────────────────
 const EXPORT_PY = path.join(SCRIPT_DIR, 'export.py');
+
+// ── What a sync actually brought in ───────────────────────────────────────────
+// Classification used to run over every unclassified row in the collection, and
+// the same rows kept coming back forever. Two reasons, both fixed here:
+//
+//   1. Scope. A sync adds a handful of tweets; the backlog behind them is in the
+//      hundreds. Re-labelling the backlog is an agent call per 20 rows and the
+//      bulk of the wait, for labels those rows already had.
+//   2. Persistence. The AI backends wrote their labels into bookmarks.json only,
+//      and the next sync's `runExport` rebuilds that file from SQLite — where
+//      the row still said `unclassified`. So the backlog could never shrink.
+//
+// Snapshotting ids before the sync and diffing after is what tells new from old:
+// `ft` leaves `synced_at` alone on rows it has seen before, but it also backfills
+// older tweets, so a timestamp watermark would silently skip them.
+function sourceBookmarkIds() {
+  if (!fs.existsSync(DB_PATH)) return null;
+  try {
+    const Database = require('better-sqlite3');
+    const conn = new Database(DB_PATH, { readonly: true });
+    try {
+      return new Set(conn.prepare('SELECT id FROM bookmarks').all().map(r => String(r.id)));
+    } finally { conn.close(); }
+  } catch {
+    // No snapshot means no way to tell new from old. Returning null falls back
+    // to classifying everything unclassified — slow, but it can't skip the rows
+    // the sync just added.
+    return null;
+  }
+}
+
+// Ids present after the sync that weren't there before. `null` in stays `null`
+// out, so callers can tell "nothing new" from "couldn't tell".
+function newlySyncedIds(before) {
+  if (!before) return null;
+  const after = sourceBookmarkIds();
+  if (!after) return null;
+  const added = new Set();
+  for (const id of after) if (!before.has(id)) added.add(id);
+  return added;
+}
+
+function writeIdsFile(ids) {
+  const file = path.join(os.tmpdir(), `tsb-classify-ids-${Date.now()}.txt`);
+  fs.writeFileSync(file, [...ids].join('\n'));
+  return file;
+}
+
+// The bare tweet id Field Theory's SQLite knows a row by, or null when the row
+// isn't X's. Ids reach the merged collection namespaced (`x:123`, `hn:456`);
+// only X's rows live in that DB, and an 8-digit HN id passed through unchecked
+// could in principle match a tweet id.
+function xDbId(bookmark) {
+  const { source, rawId } = store.splitId(bookmark.id);
+  return source === 'x' ? rawId : null;
+}
+
+// Persist AI-assigned categories into Field Theory's SQLite, so the next export
+// carries them instead of overwriting them with `unclassified`.
+function saveCategoriesToDb(assigned) {
+  if (!assigned.length || !fs.existsSync(DB_PATH)) return 0;
+  try {
+    const Database = require('better-sqlite3');
+    const conn = new Database(DB_PATH);
+    try {
+      const stmt = conn.prepare('UPDATE bookmarks SET primary_category = ?, categories = ? WHERE id = ?');
+      let saved = 0;
+      conn.transaction(rows => {
+        for (const r of rows) saved += stmt.run(r.category, r.category, r.id).changes;
+      })(assigned);
+      return saved;
+    } finally { conn.close(); }
+  } catch (e) {
+    logs.classify.push(`Couldn't save categories to the source DB (${e.message}) — they may be re-classified next sync.\n`);
+    return 0;
+  }
+}
 
 function runExport(onDone) {
   // export.py reads SQLite → bookmarks.json, preserving colorLabel/note/isRead/favFolder
@@ -1398,6 +1484,7 @@ app.post('/api/syncall', (req, res) => {
 function runFieldTheorySync(settings) {
   const FT_BIN = resolveBin('fieldtheory') || FT;
   const browser = settings.syncBrowser || 'chrome';
+  const before = sourceBookmarkIds();
   runProc('sync', FT_BIN, ['sync', '--browser', browser, '--yes'], (code) => {
     // A failed sync leaves the previous export in place. Classifying it again
     // burns an agent run per batch to relabel bookmarks that already carry the
@@ -1408,39 +1495,71 @@ function runFieldTheorySync(settings) {
     const classifyBackend = settings.classifyBackend || 'python';
     status.classify = 'running';
 
+    // Only what this sync pulled in gets classified. null means the snapshot
+    // failed and we can't tell — then everything unclassified is fair game.
+    const newIds = newlySyncedIds(before);
+
+    // Nothing new: still export, because counts, folders and article text move
+    // on rows we already had, but don't spend a classifier run on old labels.
+    if (newIds && newIds.size === 0) {
+      logs.classify.push('No new bookmarks — nothing to classify.\n');
+      runExport(() => { status.classify = 'done'; });
+      return;
+    }
+
     if (classifyBackend === 'python') {
       // 1. classify in SQLite via classify.py, 2. export to bookmarks.json
-      runProc('classify', 'python3', [CLASSIFY_PY], () => {
+      const idsFile = newIds ? writeIdsFile(newIds) : null;
+      const args = idsFile ? [CLASSIFY_PY, `--ids-file=${idsFile}`] : [CLASSIFY_PY];
+      runProc('classify', 'python3', args, () => {
+        if (idsFile) { try { fs.unlinkSync(idsFile); } catch {} }
         runExport(() => { status.classify = 'done'; });
       });
     } else {
       // 1. export first so we have JSON to classify
       // 2. classify with AI CLI, 3. write categories back
       const aiCmd = classifyBackend === 'codex' ? 'codex' : 'claude';
+      // Logged here rather than above the backend split: runProc clears
+      // logs.classify when it starts the python classifier, which would take
+      // this line with it.
+      if (newIds) {
+        logs.classify.push(`${newIds.size} new bookmark${newIds.size === 1 ? '' : 's'} from this sync.\n`);
+      }
       logs.classify.push(`Exporting bookmarks…\n`);
 
       runExport(() => {
         let data;
         try { data = readBookmarks(); } catch { status.classify = 'error'; return; }
 
-        const unclassified = data.filter(b =>
-          !b.primaryCategory || b.primaryCategory === '' || b.primaryCategory === 'unclassified'
+        // `newIds` holds bare tweet ids from SQLite, so rows are matched on the
+        // id that DB knows them by. Rows from other sources answer null and
+        // fall out: this panel syncs X, and nothing here fetched them.
+        const pending = data.filter(b =>
+          (!b.primaryCategory || b.primaryCategory === '' || b.primaryCategory === 'unclassified') &&
+          (!newIds || newIds.has(xDbId(b)))
         );
 
-        if (!unclassified.length) { status.classify = 'done'; return; }
+        if (!pending.length) {
+          logs.classify.push('Nothing new to classify.\n');
+          status.classify = 'done';
+          return;
+        }
 
-        logs.classify.push(`Classifying ${unclassified.length} bookmarks with ${aiCmd}…\n`);
+        logs.classify.push(`Classifying ${pending.length} new bookmarks with ${aiCmd}…\n`);
         const batchSize = 20;
+        const assigned = [];
         let done = 0;
 
         function runBatch(i) {
-          if (i >= unclassified.length) {
+          if (i >= pending.length) {
             try { writeBookmarks(data); } catch {}
+            // Back into SQLite as well, or the next sync's export resets them.
+            saveCategoriesToDb(assigned);
             status.classify = 'done';
             logs.classify.push(`Done. ${done} classified.\n`);
             return;
           }
-          const batch = unclassified.slice(i, i + batchSize);
+          const batch = pending.slice(i, i + batchSize);
           const lines = batch.map((b, idx) => `${idx + 1}. ${(b.text || '').slice(0, 300)}`).join('\n');
           const prompt = `Classify tweets into one of: ${CATEGORIES.join(', ')}. Return ONLY a JSON array. No markdown.\n\n${lines}`;
           const args2 = buildAgentArgs(classifyBackend === 'codex' ? 'codex' : 'claude', prompt);
@@ -1457,12 +1576,17 @@ function runFieldTheorySync(settings) {
                   const cat = cats[idx];
                   const valid = CATEGORIES.includes(cat) ? cat : 'misc';
                   const bm = data.find(d => d.id === b.id);
-                  if (bm) { bm.primaryCategory = valid; bm.categories = [valid]; }
+                  if (bm) {
+                    bm.primaryCategory = valid;
+                    bm.categories = [valid];
+                    const dbId = xDbId(bm);
+                    if (dbId) assigned.push({ id: dbId, category: valid });
+                  }
                 });
                 done += batch.length;
               } catch {}
             }
-            logs.classify.push(`Categories: ${Math.min(i + batchSize, unclassified.length)}/${unclassified.length}\n`);
+            logs.classify.push(`Categories: ${Math.min(i + batchSize, pending.length)}/${pending.length}\n`);
             runBatch(i + batchSize);
           });
           proc.on('error', () => { status.classify = 'error'; });

@@ -124,6 +124,12 @@ saving patterns over time:
 
 ![Stats and observations](docs/screenshots/05-stats.png)
 
+**Pick a reading face.** Settings → Appearance offers five: the system font,
+Inter, a serif for long reading, a hand-drawn one, and a monospace. It applies
+to the text you read and not to the chrome — a hand-drawn interface is a
+novelty where a hand-drawn page is a reading choice. All five are bundled as
+latin subsets, so the face you picked is the face you get with no network.
+
 **Bookmark podcast.** Turn any slice of your collection into an audio digest —
 free browser TTS, or ElevenLabs / Sarvam if you want better voices:
 
@@ -149,7 +155,7 @@ route in is a Field Theory sync, so it goes straight to its feed.
 
 | Source | How it gets in | Needs |
 |---|---|---|
-| **X** | `ft sync` on a schedule you trigger | Field Theory |
+| **X** | `ft sync` on a schedule you trigger — the only source **Sync & Classify** drives | Field Theory |
 | **Hacker News** | Browse the front page or an AI feed, save what you want | nothing |
 | **YouTube** | Paste a video, import a public playlist, or a Takeout export | nothing / API key / export |
 | **Instagram** | Official data export | export |
@@ -217,6 +223,16 @@ with their counts, and only the ones you tick are imported — three collections
 rather than everything you ever tapped save on is the entire point of doing it
 this way.
 
+Captions come through too, so a saved post reads as something rather than as a
+bare link. Thumbnails do not: the export contains no image for a post you saved,
+and Instagram's CDN links expire within days, so a preview would be broken by
+the time you looked at it.
+
+**Check the date range when you request the export.** The default is the last
+year, and a collection you have not added to since then is left out of the
+archive entirely — `start_here.html` inside the export states the window it
+covers. Pick *All time* to get everything.
+
 Both exports are two-phase: the app reads the file, shows you the collections it
 found with their sizes, and imports only the ones you tick. Choosing three
 collections is the entire point of doing it this way.
@@ -228,8 +244,15 @@ and expire within days, so a preview would be broken by the time you read it.
 
 An Instagram collection and a YouTube playlist are the same kind of thing as X's
 bookmark folders: a container the remote service owns. They all land in the
-**Folders** section of the sidebar, kept strictly separate from **Favourites**,
-which are yours. A sync can re-derive a folder; nothing can touch a favourite.
+**Folders** section of the sidebar, each marked with the logo of the service it
+came from — a name like *Job Hunt with Juhi* gives no clue on its own.
+
+Folders sit outside the filters above them. A folder is a whole thing, so
+opening one shows all of it rather than whatever survives the source and read
+state you happened to have set.
+
+They stay strictly separate from **Favourites**, which are yours. A sync can
+re-derive a folder; nothing can touch a favourite.
 
 ---
 

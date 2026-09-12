@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { SOURCES, getSource } from '../sources';
+import { SourceIcon, getBookmarkSource } from '../bookmark-sources';
 // Note: syncSettingsOpen uses simple toggle — no outside-click needed since it's inline
 
 const TOOLS = [
@@ -231,7 +232,13 @@ export default function RightPanel({
       {/* Sync & Classify */}
       <div className="panel-card">
         <div className="panel-card-title">
+          {/* Named for the one source it drives. Sitting above a list of five
+              sources, an unqualified "Sync" reads as though it fetches all of
+              them — Hacker News, YouTube and Instagram each come in their own
+              way, and none of them through here. */}
+          <SourceIcon source="x" size={14} style={{ color: getBookmarkSource('x').accent, marginRight: 7, verticalAlign: '-2px' }} />
           Sync &amp; Classify
+          <span className="panel-card-qualifier">X only</span>
           <button
             className={`sync-settings-gear ${syncSettingsOpen ? 'open' : ''}`}
             onClick={() => setSyncSettingsOpen(p => !p)}

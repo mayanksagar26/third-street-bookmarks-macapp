@@ -19,7 +19,11 @@
 // end. So the empty row is the way in instead.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const BOOKMARK_SOURCES = {
+import { SOURCE_SCHEMA, SORT_DEFS, sortsForSources } from './source-schema';
+
+export { SORT_DEFS, sortsForSources };
+
+const ICONS = {
   x: {
     id: 'x', label: 'X', accent: '#1d9bf0',
     emptyHint: 'Sync via Field Theory to fill this', action: null,
@@ -34,12 +38,15 @@ export const BOOKMARK_SOURCES = {
   },
   yt: {
     id: 'yt', label: 'YouTube', accent: '#ff0033',
+    // A Takeout row carries no view or like count, and inventing zeros for
+    // four counters made every video look like nobody had ever watched it.
     emptyHint: 'Paste a video, import a playlist or a Takeout export', action: 'add:youtube',
     browseLabel: 'Playlists & Import',
     icon: <path d="M21.6 7.2s-.2-1.4-.8-2c-.75-.8-1.6-.8-2-.85C16 4.2 12 4.2 12 4.2h-.01s-4 0-6.8.2c-.4.05-1.25.05-2 .85-.6.6-.8 2-.8 2S2.2 8.8 2.2 10.5v1.6c0 1.6.2 3.3.2 3.3s.2 1.4.8 2c.75.8 1.75.77 2.2.86 1.6.15 6.8.2 6.8.2s4 0 6.8-.21c.4-.05 1.25-.05 2-.85.6-.6.8-2 .8-2s.2-1.6.2-3.3v-1.6c0-1.6-.2-3.3-.2-3.3zM9.9 14.1V8.4l5.2 2.86-5.2 2.84z"/>,
   },
   ig: {
     id: 'ig', label: 'Instagram', accent: '#e1306c',
+    // The export has no engagement data at all.
     emptyHint: 'Import your Instagram data export', action: 'add:instagram',
     browseLabel: 'Collections & Import',
     icon: <path d="M12 2.2c3.2 0 3.6 0 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.25.07 1.65.07 4.85s0 3.6-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.25.06-1.65.07-4.85.07s-3.6 0-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.8 3.8 0 0 1-1.38-.9 3.8 3.8 0 0 1-.9-1.38c-.16-.42-.36-1.06-.41-2.23C2.2 15.6 2.2 15.2 2.2 12s0-3.6.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.4 2.2 8.8 2.2 12 2.2zm0 3.13A6.67 6.67 0 1 0 18.67 12 6.67 6.67 0 0 0 12 5.33zm0 11A4.33 4.33 0 1 1 16.33 12 4.33 4.33 0 0 1 12 16.33zm6.94-11.2a1.56 1.56 0 1 1-1.56-1.55 1.56 1.56 0 0 1 1.56 1.56z"/>,
@@ -55,9 +62,21 @@ export const BOOKMARK_SOURCES = {
 /** The order sources appear in the sidebar: the ones you'll have most, first. */
 export const SOURCE_ORDER = ['x', 'hn', 'yt', 'ig', 'link'];
 
+/**
+ * Presentation and schema, joined.
+ *
+ * The icons and colours live here because they are markup; what each source can
+ * be measured and sorted by lives in `source-schema.js` because it is data a
+ * test runner has to be able to import.
+ */
+export const BOOKMARK_SOURCES = Object.fromEntries(
+  Object.entries(ICONS).map(([id, icon]) => [id, { ...icon, ...(SOURCE_SCHEMA[id] || {}) }]),
+);
+
 export function getBookmarkSource(id) {
   return BOOKMARK_SOURCES[id] || BOOKMARK_SOURCES.link;
 }
+
 
 /** Icon for a source at a given size. `all` gets a neutral book, never a logo. */
 export function SourceIcon({ source, size = 16, style }) {

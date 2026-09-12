@@ -5,10 +5,17 @@ Classify unclassified bookmarks in the SQLite DB.
 If OPENAI_API_KEY is set: uses GPT-4o-mini via the openai package.
 Otherwise: falls back to keyword/regex rules (fast, free, offline).
 
+By default it looks at every unclassified row. Pass --ids-file to restrict it
+to a specific set of ids (one per line) — what a sync just brought in, rather
+than the whole backlog.
+
 Usage:
     python3 classify.py
+    python3 classify.py --ids-file=/tmp/new-ids.txt
     OPENAI_API_KEY=sk-... python3 classify.py
 """
+
+from __future__ import annotations  # `set | None` on the 3.9 python3 macOS ships
 
 import json
 import os
@@ -139,7 +146,7 @@ def classify_openai(tweets: list[dict]) -> list[str]:
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────
 
-def fetch_unclassified(conn: sqlite3.Connection) -> list[dict]:
+def fetch_unclassified(conn: sqlite3.Connection, only_ids: set | None = None) -> list[dict]:
     cur = conn.cursor()
     cur.execute("""
         SELECT id, text, author_handle
@@ -148,7 +155,23 @@ def fetch_unclassified(conn: sqlite3.Connection) -> list[dict]:
            OR primary_category = ''
            OR primary_category = 'unclassified'
     """)
-    return [{"id": r[0], "text": (r[1] or ""), "author": (r[2] or "")} for r in cur.fetchall()]
+    rows = cur.fetchall()
+    if only_ids is not None:
+        # Filtered here rather than with a SQL `IN (...)`: the caller's list is
+        # however many bookmarks a sync returned, which can run past SQLite's
+        # parameter limit.
+        rows = [r for r in rows if r[0] in only_ids]
+    return [{"id": r[0], "text": (r[1] or ""), "author": (r[2] or "")} for r in rows]
+
+
+def read_ids_file(path: Path) -> set:
+    """Ids to classify, one per line. An empty file means an empty set — "the
+    sync added nothing" — never "classify everything"."""
+    return {
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
 
 
 def save_category(conn: sqlite3.Connection, tweet_id: str, category: str):
@@ -160,21 +183,23 @@ def save_category(conn: sqlite3.Connection, tweet_id: str, category: str):
 
 # ── JSON mode (source-agnostic: classifies a bookmarks.json in place) ──────────
 
-def classify_json_file(path: Path, backend: str):
+def classify_json_file(path: Path, backend: str, only_ids: set | None = None):
     """Classify unclassified rows in a bookmarks.json directly, no SQLite.
     Used by sources (e.g. birdclaw) that export JSON rather than ft's DB."""
     data = json.loads(path.read_text(encoding="utf-8"))
     todo = [
         b for b in data
-        if not b.get("primaryCategory") or b.get("primaryCategory") in ("", "unclassified")
+        if (not b.get("primaryCategory") or b.get("primaryCategory") in ("", "unclassified"))
+        and (only_ids is None or b.get("id") in only_ids)
     ]
     if not todo:
-        print("  Nothing to classify.")
+        print("  Nothing new to classify." if only_ids is not None else "  Nothing to classify.")
         return
 
     use_llm = backend in ("openai", "claude", "codex")
     mode = {"openai": "openai/gpt-4o-mini", "claude": "claude CLI", "codex": "codex CLI"}.get(backend, "regex (offline)")
-    print(f"  Classifying {len(todo)} bookmarks using {mode}...")
+    scope = "new " if only_ids is not None else ""
+    print(f"  Classifying {len(todo)} {scope}bookmarks using {mode}...")
 
     batch_size = 20 if use_llm else len(todo)
     for i in range(0, len(todo), batch_size):
@@ -196,7 +221,7 @@ def classify_json_file(path: Path, backend: str):
         print(f"  Categories: {min(i + batch_size, len(todo))}/{len(todo)}", flush=True)
 
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"  Done. {len(todo)} bookmarks classified.")
+    print(f"  Done. {len(todo)} {scope}bookmarks classified.")
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -205,11 +230,14 @@ def main():
     # Backend selection: --backend=claude|codex|openai|regex
     backend = 'regex'
     json_path = None
+    only_ids = None
     for arg in sys.argv[1:]:
         if arg.startswith('--backend='):
             backend = arg.split('=', 1)[1]
         elif arg.startswith('--json='):
             json_path = Path(arg.split('=', 1)[1])
+        elif arg.startswith('--ids-file='):
+            only_ids = read_ids_file(Path(arg.split('=', 1)[1]))
 
     if backend == 'regex':
         if os.environ.get("OPENAI_API_KEY"):
@@ -221,21 +249,22 @@ def main():
 
     # JSON mode short-circuits the SQLite path entirely.
     if json_path is not None:
-        classify_json_file(json_path, backend)
+        classify_json_file(json_path, backend, only_ids)
         return
 
     use_llm = backend in ('openai', 'claude', 'codex')
     mode = {'openai': 'openai/gpt-4o-mini', 'claude': 'claude CLI', 'codex': 'codex CLI'}.get(backend, 'regex (offline)')
 
     conn = sqlite3.connect(str(DB_PATH))
-    tweets = fetch_unclassified(conn)
+    tweets = fetch_unclassified(conn, only_ids)
 
     if not tweets:
-        print("  Nothing to classify.")
+        print("  Nothing new to classify." if only_ids is not None else "  Nothing to classify.")
         conn.close()
         return
 
-    print(f"  Classifying {len(tweets)} bookmarks using {mode}...")
+    scope = "new " if only_ids is not None else ""
+    print(f"  Classifying {len(tweets)} {scope}bookmarks using {mode}...")
 
     batch_size = 20 if use_llm else len(tweets)
     done = 0
@@ -261,7 +290,7 @@ def main():
 
     conn.commit()
     conn.close()
-    print(f"  Done. {len(tweets)} bookmarks classified.")
+    print(f"  Done. {len(tweets)} {scope}bookmarks classified.")
 
 
 if __name__ == "__main__":

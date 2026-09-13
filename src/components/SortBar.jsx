@@ -15,8 +15,10 @@ export default function SortBar({ currentSort, onSort, sourceIds = [] }) {
       {sorts.map(s => (
         <button
           key={s.key}
+          type="button"
           className={`sort-btn ${currentSort === s.key ? 'active' : ''}`}
           onClick={() => onSort(s.key)}
+          aria-pressed={currentSort === s.key}
         >
           {s.label}
         </button>

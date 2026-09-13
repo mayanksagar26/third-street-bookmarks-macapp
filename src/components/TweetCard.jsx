@@ -261,8 +261,10 @@ export default function TweetCard({
                 is. */}
             {onExplain && (
               <button
+                type="button"
                 className="tw-btn ai-btn"
                 title="Explain this with AI"
+                aria-label="Explain this with AI"
                 onClick={e => { e.stopPropagation(); onExplain(b); }}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor">
@@ -276,8 +278,10 @@ export default function TweetCard({
             {/* Speak button */}
             {onSpeakBookmark && (
               <button
+                type="button"
                 className="tw-btn speak-btn"
                 title="Listen to this bookmark"
+                aria-label="Listen to this bookmark"
                 onClick={e => { e.stopPropagation(); onSpeakBookmark(b); }}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/></svg>
@@ -293,8 +297,11 @@ export default function TweetCard({
                 the note you were writing. */}
             <span className="note-wrap" ref={noteWrapRef}>
               <button
+                type="button"
                 className={`tw-btn note-btn${note ? ' active' : ''}${showNotePopup ? ' open' : ''}`}
                 title={note ? 'Edit note' : 'Add note'}
+                aria-label={note ? 'Edit note' : 'Add note'}
+                aria-expanded={showNotePopup}
                 onClick={handleNoteClick}
               >
                 <svg viewBox="0 0 24 24" fill={note ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={note ? '0' : '1.8'}>
@@ -325,12 +332,14 @@ export default function TweetCard({
                   <div className="note-popup-actions">
                     {note && (
                       <button
+                        type="button"
                         className="note-popup-delete"
                         onClick={() => { setNoteText(''); setShowNotePopup(false); onUpdateNote(b.id, null); }}
                       >Delete</button>
                     )}
                     <span className="note-popup-hint"><kbd>⌘</kbd><kbd>↵</kbd> save · <kbd>esc</kbd> cancel</span>
                     <button
+                      type="button"
                       className="note-popup-save"
                       onClick={saveNote}
                       disabled={noteText.trim() === (note || '').trim()}
@@ -342,8 +351,11 @@ export default function TweetCard({
 
             {/* Read button */}
             <button
+              type="button"
               className={`tw-btn read-btn${isRead ? ' active' : ''}`}
               title={isRead ? 'Mark as unread' : 'Mark as read'}
+              aria-label={isRead ? 'Mark as unread' : 'Mark as read'}
+              aria-pressed={isRead}
               onClick={e => { e.stopPropagation(); onToggleRead(b.id); }}
             >
               {isRead
@@ -382,6 +394,7 @@ export default function TweetCard({
             />
             {(overflows || expanded) && (
               <button
+                type="button"
                 className="tweet-more"
                 onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
               >
@@ -431,12 +444,12 @@ export default function TweetCard({
 
         {/* Note display */}
         {note && (
-          <div className="tweet-note" onClick={handleNoteClick}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0, opacity: 0.6 }}>
+          <button type="button" className="tweet-note" onClick={handleNoteClick} aria-label={`Edit note: ${note}`}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0, opacity: 0.6 }} aria-hidden="true">
               <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
             </svg>
             {note}
-          </div>
+          </button>
         )}
 
         {cats.length > 0 && (

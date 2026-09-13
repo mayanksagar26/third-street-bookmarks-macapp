@@ -24,6 +24,51 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Rows that are controls ───────────────────────────────────────────────────
+   A row you click is a <button>, not a <div> with an onClick: a div is
+   unreachable by keyboard and invisible to a screen reader, so the sidebar
+   filters, the source list and the voice rows were mouse-only.
+
+   Undoing the browser's own button chrome happens here, once, rather than in
+   each rule. This block sits directly after the global reset so that every
+   rule further down still owns colour, background, font-size and hover — they
+   come later, so they win. */
+.sidebar-item,
+.sidebar-fav-item,
+.source-main,
+.top-author,
+.cat-chip,
+.cat-clear-all,
+.tweet-note {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+/* Full-bleed rows only. A category chip sizes to its own text. */
+.sidebar-item,
+.sidebar-fav-item,
+.top-author,
+.cat-clear-all,
+.tweet-note {
+  width: 100%;
+}
+
+/* Somewhere to look.
+   Reaching a row by keyboard is only half of it — you also have to be able to
+   see which one you are on, and the app styles focus on text inputs only, so
+   every button was relying on the platform ring over a dark custom surface.
+   `:focus-visible` rather than `:focus`, so a mouse click doesn't leave a ring
+   behind on the row you just pressed. */
+:where(button, [role="button"], a, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
 :root {
   /* ── Logo palette ──────────────────────────────────────────────────────────
      Sampled straight out of the app icon: a near-black navy body that fades
@@ -786,8 +831,8 @@ body::before {
   scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
 .top-author-info { flex: 1; min-width: 0; }
-.top-author-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.top-author-handle { font-size: 13px; color: var(--text-secondary); }
+.top-author-name { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top-author-handle { display: block; font-size: 13px; color: var(--text-secondary); }
 .top-author-count { font-size: 13px; font-weight: 600; color: var(--accent); flex-shrink: 0; }
 
 /* ── Pagination ── */
@@ -2728,6 +2773,17 @@ kbd {
    has something and you want the browse or import surface again. An empty row
    reveals it on row hover, because the whole row is the doorway; a filled row
    only on badge hover, because the row itself is a filter. */
+.sidebar-item.source-item { padding: 0; }
+.source-item .source-main {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center;
+  padding: 9px 0 9px 20px;
+}
+.source-item > .sidebar-badge,
+.source-item > .src-action { margin-right: 20px; }
+/* A folder being renamed is a text field, not a control: no button wrapper. */
+.sidebar-fav-item.is-renaming { cursor: default; }
+
 .sidebar-badge.src-action {
   font: inherit;
   cursor: pointer;

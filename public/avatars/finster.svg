@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Miss Finster">
+  <title>Miss Finster</title>
+  <rect width="128" height="128" fill="#f6e7a8"/>
+  <path d="M2 130 C2 106 27.0 95 64 95 C101.0 95 126 106 126 130 Z" fill="#f2d24b" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M26 112 l4 -5 l4 5 l-4 5 Z M96 112 l4 -5 l4 5 l-4 5 Z M40 124 l4 -5 l4 5 l-4 5 Z M82 124 l4 -5 l4 5 l-4 5 Z" fill="#ef7fb0"/>
+  <path d="M46 98 Q54 110 64 101 Q74 110 82 98 Q72 94 64 96 Q56 94 46 98 Z" fill="#ffffff" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M58 102 L66 118 L74 102" fill="none" stroke="#6b6b6b" stroke-width="1.8"/>
+  <rect x="60" y="116" width="15" height="8" rx="3" fill="#c9ced4" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M55 84 L55 99 Q64 104 73 99 L73 84 Z" fill="#f3dccd" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="64" cy="37" r="12" fill="#a8a8ad" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M34 66 C28 34 100 34 94 66 C92 56 88 50 84 48 L44 48 C40 50 36 56 34 66 Z" fill="#a8a8ad" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="37" cy="66" rx="5" ry="7" fill="#f3dccd" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="91" cy="66" rx="5" ry="7" fill="#f3dccd" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M38 60 C38 36 90 36 90 60 C90 80 82 94 64 94 C46 94 38 80 38 60 Z" fill="#f3dccd" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="36" cy="76" r="3" fill="#ffffff" stroke="#b9b9b9" stroke-width="1.2"/>
+  <circle cx="92" cy="76" r="3" fill="#ffffff" stroke="#b9b9b9" stroke-width="1.2"/>
+  <path d="M42 54 C48 42 80 42 86 54 C78 48 50 48 42 54 Z" fill="#a8a8ad" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="54" cy="64" r="2" fill="#2a1f1a"/>
+  <circle cx="74" cy="64" r="2" fill="#2a1f1a"/>
+  <path d="M42 58 L64 60 L58 70 L46 69 Z M86 58 L64 60 L70 70 L82 69 Z" fill="#ffffff" fill-opacity="0.2" stroke="#111" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M42 58 L38 54 M86 58 L90 54" stroke="#111" stroke-width="3" stroke-linecap="round"/>
+  <path d="M63 70 q4 3 0 6" fill="none" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M56 84 q8 -5 16 0" fill="none" stroke="#c8262f" stroke-width="3.6" stroke-linecap="round"/>
+  <path d="M50 80 q-3 3 -2 6 M78 80 q3 3 2 6" fill="none" stroke="#c9a896" stroke-width="1.6"/>
+</svg>

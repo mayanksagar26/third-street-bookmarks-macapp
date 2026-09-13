@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { SOURCES, getSource } from '../sources';
 import { SourceIcon, getBookmarkSource } from '../bookmark-sources';
+import { useProfileAvatar } from '../avatars';
 // Note: syncSettingsOpen uses simple toggle — no outside-click needed since it's inline
 
 const TOOLS = [
@@ -82,6 +83,7 @@ export default function RightPanel({
   const source = getSource(syncSource);
   const installedMap = Object.fromEntries(sourceInfo.map(s => [s.id, s.installed]));
   const [menuOpen, setMenuOpen]               = useState(false);
+  const avatar = useProfileAvatar();
   const [syncSettingsOpen, setSyncSettingsOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -155,7 +157,7 @@ export default function RightPanel({
           aria-haspopup="true"
         >
           <div className="profile-avatar" style={{background:'transparent',border:'none',padding:0,overflow:'hidden',borderRadius:'50%',width:32,height:32,flexShrink:0}}>
-            <img src="/tj.png" alt="TJ" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'50%'}}/>
+            <img src={avatar.src} alt={avatar.label} style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'50%'}}/>
           </div>
           <span className="profile-btn-label">Profile</span>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 'auto', color: 'var(--text-tertiary)', transform: menuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
@@ -188,6 +190,18 @@ export default function RightPanel({
             <div className="profile-menu-divider"><span>App</span></div>
             <button
               className="profile-menu-item"
+              onClick={() => { setMenuOpen(false); onOpenSettings?.('profile'); }}
+            >
+              <span className="profile-menu-icon">
+                <img src={avatar.src} alt="" className="profile-menu-avatar" />
+              </span>
+              <div className="profile-menu-info">
+                <div className="profile-menu-label">Profile picture</div>
+                <div className="profile-menu-desc">Pick a character or upload your own</div>
+              </div>
+            </button>
+            <button
+              className="profile-menu-item"
               onClick={() => { setMenuOpen(false); onOpenSettings?.(); }}
             >
               <span className="profile-menu-icon">
@@ -197,7 +211,7 @@ export default function RightPanel({
               </span>
               <div className="profile-menu-info">
                 <div className="profile-menu-label">Settings</div>
-                <div className="profile-menu-desc">AI, bookmarks, data</div>
+                <div className="profile-menu-desc">Profile, AI, bookmarks, data</div>
               </div>
             </button>
 

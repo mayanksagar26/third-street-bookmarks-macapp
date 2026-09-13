@@ -1568,6 +1568,7 @@ body::before {
 .profile-menu-item:hover { background: rgba(255,255,255,0.06); }
 .profile-menu-item.active { color: var(--accent); }
 .profile-menu-icon { color: var(--text-secondary); flex-shrink: 0; }
+.profile-menu-avatar { display: block; width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
 .profile-menu-item.active .profile-menu-icon { color: var(--accent); }
 .profile-menu-info { flex: 1; }
 .profile-menu-label { font-size: 13px; font-weight: 600; }

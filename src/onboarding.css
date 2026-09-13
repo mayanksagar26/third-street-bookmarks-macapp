@@ -608,3 +608,67 @@
   .set-panel { width: calc(100vw - 16px); max-height: calc(100vh - 40px); }
   .set-head, .set-tabs, .set-body { padding-left: 14px; padding-right: 14px; }
 }
+
+/* ── Profile picture picker ───────────────────────────────────────────────── */
+.avatar-picker { display: flex; flex-direction: column; gap: 8px; }
+
+/* The radio options and the upload button share one grid; `display: contents`
+   lets the radiogroup wrapper hold semantics without becoming a grid cell. */
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+.avatar-options { display: contents; }
+
+.avatar-choice {
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 6px 9px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.avatar-choice:hover { border-color: rgba(255, 255, 255, 0.16); }
+.avatar-choice:focus-visible { outline: 2px solid var(--accent, #37b4ff); outline-offset: 2px; }
+.avatar-choice.active { border-color: var(--accent, #37b4ff); background: rgba(55, 180, 255, 0.07); }
+.avatar-choice:disabled { cursor: progress; opacity: 0.7; }
+
+.avatar-choice-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.avatar-choice.active .avatar-choice-img { box-shadow: 0 0 0 2px var(--accent, #37b4ff); }
+
+.avatar-choice-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.avatar-upload-icon {
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  font-weight: 300;
+  color: var(--text-secondary, #8794a9);
+  border: 1.5px dashed rgba(255, 255, 255, 0.2);
+  box-shadow: none;
+}
+.avatar-upload:hover .avatar-upload-icon { color: var(--text-primary); border-color: rgba(255, 255, 255, 0.35); }
+
+.avatar-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--like);
+}

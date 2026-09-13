@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Mikey">
+  <title>Mikey</title>
+  <rect width="128" height="128" fill="#bfe6e6"/>
+  <path d="M2 130 C2 106 27.0 95 64 95 C101.0 95 126 106 126 130 Z" fill="#3b9aa8" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M50 96 Q64 104 78 96 L75 130 L53 130 Z" fill="#ffffff" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M55 84 L55 99 Q64 104 73 99 L73 84 Z" fill="#f7d3b8" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="33" cy="66" rx="5" ry="7" fill="#f7d3b8" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="95" cy="66" rx="5" ry="7" fill="#f7d3b8" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="64" cy="63" rx="31" ry="31" fill="#f7d3b8" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M33 58 C30 24 98 24 95 58 C90 44 80 46 74 40 C68 46 58 42 52 46 C44 44 38 50 33 58 Z" fill="#f0cd62" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M48 64 q5 -5 10 0 M70 64 q5 -5 10 0" fill="none" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="45" cy="74" r="5" fill="#f28b8b" fill-opacity="0.45"/>
+  <circle cx="83" cy="74" r="5" fill="#f28b8b" fill-opacity="0.45"/>
+  <path d="M63 68 q4 3 0 6" fill="none" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M53 79 q11 10 22 0" fill="none" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

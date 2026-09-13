@@ -21,18 +21,34 @@ function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : ''; }
 /** Folder count past which the section is worth a search box. */
 const FAV_SEARCH_FROM = 5;
 
+const FolderGlyph = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" aria-hidden="true">
+    <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>
+  </svg>
+);
+
+const PinGlyph = ({ filled }) => (
+  <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"
+    fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z"/>
+  </svg>
+);
+
 export default function Sidebar({
   total, unreadCount,
   currentFilter, onFilterChange,
   showUnreadOnly, onToggleUnread,
   catCounts, selectedCategories, onToggleCategory, onClearCategories,
-  favMap, favFolders, folderIndex = [], folderPick, onFolderClick, onRenameFavFolder,
+  favMap, folderIndex = [], folderPick, onFolderClick, onRenameFavFolder,
+  pinnedFavFolders = [], onTogglePinFolder,
   sourceCounts = {}, sourceTotals = {},
   sourceFilter, onSourceClick, onSourceAction,
   syncSource,
 }) {
   const [catSearch, setCatSearch] = useState('');
   const [favSearch, setFavSearch] = useState('');
+  const [folderSearch, setFolderSearch] = useState('');
   const [renamingFav, setRenamingFav] = useState(null);
   const [renameText, setRenameText]   = useState('');
   const source = getSource(syncSource);
@@ -49,13 +65,89 @@ export default function Sidebar({
     setRenameText('');
   }
 
-  // Busiest folders first, all of them, in a list that scrolls on its own —
-  // the same shape as the categories below.
-  const sortedFavs = Object.entries(favCounts).sort((a, b) => b[1] - a[1]);
+  // Pinned folders sit above the list in the order you pinned them, and are
+  // shown even when nothing is in them yet — a pin is a promise the row stays.
+  const pinnedSet = new Set(pinnedFavFolders);
+  const pinnedFavs = pinnedFavFolders.map(f => [f, favCounts[f] || 0]);
+
+  // The rest: busiest first, in a list that scrolls on its own — the same
+  // shape as the categories below.
+  const sortedFavs = Object.entries(favCounts)
+    .filter(([folder]) => !pinnedSet.has(folder))
+    .sort((a, b) => b[1] - a[1]);
   const favQuery = favSearch.trim().toLowerCase();
   const visibleFavs = favQuery
     ? sortedFavs.filter(([folder]) => folder.toLowerCase().includes(favQuery))
     : sortedFavs;
+
+  const folderQuery = folderSearch.trim().toLowerCase();
+  const visibleFolders = folderQuery
+    ? folderIndex.filter(entry => entry.name.toLowerCase().includes(folderQuery))
+    : folderIndex;
+
+  function renderFavRow([folder, count], pinned) {
+    if (renamingFav === folder) {
+      // A row being renamed is a text field, not a control — and a text field
+      // inside a <button> is invalid markup that the browser resolves by
+      // eating the typing.
+      return (
+        <div key={folder} className="sidebar-fav-item is-renaming">
+          <span className="sidebar-item-left">
+            <FolderGlyph />
+            <input
+              className="fav-rename-input"
+              autoFocus
+              aria-label={`Rename folder ${folder}`}
+              value={renameText}
+              onChange={e => setRenameText(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitFavRename();
+                else if (e.key === 'Escape') { setRenamingFav(null); setRenameText(''); }
+              }}
+              onBlur={commitFavRename}
+            />
+          </span>
+          <span className="fav-badge">{count}</span>
+        </div>
+      );
+    }
+    const active = currentFilter === `fav:${folder}`;
+    // Two controls in one row — open the folder, and pin it — so the row is a
+    // container rather than a button, the same way the source rows are built.
+    return (
+      <div
+        key={folder}
+        className={`sidebar-fav-item fav-row${active ? ' active' : ''}${pinned ? ' is-pinned' : ''}`}
+      >
+        <button
+          type="button"
+          className="fav-main"
+          onClick={() => onFilterChange(`fav:${folder}`)}
+          onDoubleClick={() => { setRenamingFav(folder); setRenameText(folder); }}
+          aria-pressed={active}
+          title="Double-click to rename"
+        >
+          <span className="sidebar-item-left">
+            <FolderGlyph />
+            <span className="fav-name">{folder}</span>
+          </span>
+        </button>
+        {onTogglePinFolder && (
+          <button
+            type="button"
+            className="fav-pin-btn"
+            onClick={() => onTogglePinFolder(folder)}
+            aria-pressed={pinned}
+            aria-label={pinned ? `Unpin ${folder}` : `Pin ${folder}`}
+            title={pinned ? 'Unpin' : 'Pin to top'}
+          >
+            <PinGlyph filled={pinned} />
+          </button>
+        )}
+        <span className="fav-badge">{count}</span>
+      </div>
+    );
+  }
 
   const sortedCats = Object.entries(catCounts).sort((a, b) => b[1] - a[1]);
   const q = catSearch.trim().toLowerCase();
@@ -203,7 +295,7 @@ export default function Sidebar({
       </div>
 
       {/* Favourites */}
-      {favTotal > 0 && (
+      {(favTotal > 0 || pinnedFavs.length > 0) && (
         <div className="sidebar-section">
           <div className="sidebar-section-title">Favourites</div>
           <button
@@ -220,11 +312,19 @@ export default function Sidebar({
             </span>
             <span className="fav-badge">{favTotal}</span>
           </button>
+
+          {pinnedFavs.length > 0 && (
+            <div className="fav-pinned" aria-label="Pinned folders">
+              {pinnedFavs.map(entry => renderFavRow(entry, true))}
+            </div>
+          )}
+
           {sortedFavs.length > FAV_SEARCH_FROM && (
             <div className="cat-search-wrap">
               <input
                 className="cat-search-input"
                 placeholder={`Search ${sortedFavs.length} folders…`}
+                aria-label="Search favourite folders"
                 value={favSearch}
                 onChange={e => setFavSearch(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Escape') setFavSearch(''); }}
@@ -232,60 +332,19 @@ export default function Sidebar({
               <button
                 className={`cat-search-clear ${favSearch ? 'visible' : ''}`}
                 onClick={() => setFavSearch('')}
+                aria-label="Clear folder search"
               >✕</button>
             </div>
           )}
 
-          <div className="fav-list">
-            {visibleFavs.length === 0
-              ? <div className="cat-no-results">No folders match</div>
-              : visibleFavs.map(([folder, count]) => (
-                renamingFav === folder ? (
-                  // A row being renamed is a text field, not a control — and a
-                  // text field inside a <button> is invalid markup that the
-                  // browser resolves by eating the typing.
-                  <div key={folder} className="sidebar-fav-item is-renaming">
-                    <span className="sidebar-item-left">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" aria-hidden="true">
-                        <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>
-                      </svg>
-                      <input
-                        className="fav-rename-input"
-                        autoFocus
-                        aria-label={`Rename folder ${folder}`}
-                        value={renameText}
-                        onChange={e => setRenameText(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') commitFavRename();
-                          else if (e.key === 'Escape') { setRenamingFav(null); setRenameText(''); }
-                        }}
-                        onBlur={commitFavRename}
-                      />
-                    </span>
-                    <span className="fav-badge">{count}</span>
-                  </div>
-                ) : (
-                  <button
-                    key={folder}
-                    type="button"
-                    className={`sidebar-fav-item ${currentFilter === `fav:${folder}` ? 'active' : ''}`}
-                    onClick={() => onFilterChange(`fav:${folder}`)}
-                    onDoubleClick={() => { setRenamingFav(folder); setRenameText(folder); }}
-                    aria-pressed={currentFilter === `fav:${folder}`}
-                    title="Double-click to rename"
-                  >
-                    <span className="sidebar-item-left">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" aria-hidden="true">
-                        <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>
-                      </svg>
-                      {folder}
-                    </span>
-                    <span className="fav-badge">{count}</span>
-                  </button>
-                )
-              ))
-            }
-          </div>
+          {sortedFavs.length > 0 && (
+            <div className="fav-list">
+              {visibleFavs.length === 0
+                ? <div className="cat-no-results">No folders match</div>
+                : visibleFavs.map(entry => renderFavRow(entry, false))
+              }
+            </div>
+          )}
 
         </div>
       )}
@@ -359,26 +418,51 @@ export default function Sidebar({
       {folderIndex.length > 0 && (
         <div className="sidebar-section">
           <div className="sidebar-section-title">Folders</div>
-          {folderIndex.map(entry => {
-            const src = getBookmarkSource(entry.source);
-            return (
+          {folderIndex.length > FAV_SEARCH_FROM && (
+            <div className="cat-search-wrap">
+              <input
+                className="cat-search-input"
+                placeholder={`Search ${folderIndex.length} folders…`}
+                aria-label="Search folders"
+                value={folderSearch}
+                onChange={e => setFolderSearch(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Escape') setFolderSearch(''); }}
+              />
               <button
-                key={entry.key}
-                type="button"
-                className={`sidebar-item folder-item ${folderPick?.key === entry.key ? 'active' : ''}`}
-                onClick={() => onFolderClick?.(entry)}
-                aria-pressed={folderPick?.key === entry.key}
-                title={`${entry.count} from ${src.label}`}
-              >
-                <span className="sidebar-item-left">
-                  <SourceIcon source={entry.source} size={15} style={{ color: src.accent }} />
-                  <span className="folder-name">{entry.name}</span>
-                  {entry.ambiguous && <span className="folder-qualifier">{src.short || src.label}</span>}
-                </span>
-                <span className="sidebar-badge">{entry.count}</span>
-              </button>
-            );
-          })}
+                className={`cat-search-clear ${folderSearch ? 'visible' : ''}`}
+                onClick={() => setFolderSearch('')}
+                aria-label="Clear folder search"
+              >✕</button>
+            </div>
+          )}
+          {/* A fixed-height list that scrolls, like the categories: a library
+              with dozens of playlists would otherwise push everything below it
+              off the bottom of the sidebar. */}
+          <div className="folder-list">
+            {visibleFolders.length === 0
+              ? <div className="cat-no-results">No folders match</div>
+              : visibleFolders.map(entry => {
+                const src = getBookmarkSource(entry.source);
+                return (
+                  <button
+                    key={entry.key}
+                    type="button"
+                    className={`sidebar-item folder-item ${folderPick?.key === entry.key ? 'active' : ''}`}
+                    onClick={() => onFolderClick?.(entry)}
+                    aria-pressed={folderPick?.key === entry.key}
+                    title={`${entry.name} · ${entry.count} from ${src.label}`}
+                  >
+                    <span className="sidebar-item-left">
+                      <SourceIcon source={entry.source} size={14} style={{ color: src.accent }} />
+                      <span className="folder-name">{entry.name}</span>
+                      {entry.ambiguous && <span className="folder-qualifier">{src.short || src.label}</span>}
+                    </span>
+                    <span className="sidebar-badge">{entry.count}</span>
+                  </button>
+                );
+              })
+            }
+          </div>
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { FONTS, DEFAULT_FONT, applyFont } from '../fonts';
 import AgentPicker, { useRuntimes } from './AgentPicker';
 import BookmarkFinder from './BookmarkFinder';
@@ -44,10 +44,18 @@ function shortenPath(p) {
   return p ? p.replace(/^\/Users\/[^/]+/, '~') : null;
 }
 
+/** Everything inside `root` that a Tab can land on, in document order. */
+function focusables(root) {
+  return [...root.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )].filter(el => el.offsetParent !== null || el === document.activeElement);
+}
+
 export default function Settings({ onClose }) {
   const [section, setSection] = useState('ai');
   const [settings, setSettings] = useState(null);
   const { runtimes, loading, active, refresh } = useRuntimes();
+  const panelRef = useRef(null);
 
   const load = useCallback(async () => {
     try {
@@ -67,6 +75,50 @@ export default function Settings({ onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  /**
+   * Keep the keyboard inside the dialog while it is open.
+   *
+   * A modal that only *looks* modal is the worst of both: the page behind it is
+   * dimmed and inert to the mouse, but Tab walks straight out into it, and a
+   * screen reader user ends up reading a feed they cannot see. So: focus moves
+   * in on open, Tab and Shift-Tab wrap at the ends, and whatever was focused
+   * before gets it back on close.
+   *
+   * Hand-rolled rather than pulled from a library — this app ships three
+   * runtime dependencies, and a focus trap is fifteen lines.
+   */
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const previous = document.activeElement;
+    (focusables(panel)[0] || panel).focus();
+
+    const onKeyDown = (e) => {
+      if (e.key !== 'Tab') return;
+      const items = focusables(panel);
+      if (!items.length) { e.preventDefault(); return; }
+      const first = items[0];
+      const last = items[items.length - 1];
+      // Focus that has escaped the panel entirely comes back to an end of it.
+      if (!panel.contains(document.activeElement)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previous?.focus?.();
+    };
+  }, []);
+
   const patch = useCallback(async (changes) => {
     setSettings(s => ({ ...s, ...changes }));
     await fetch('/api/settings', {
@@ -83,8 +135,11 @@ export default function Settings({ onClose }) {
     <div className="set-overlay" onClick={onClose}>
       <div
         className="set-panel"
+        ref={panelRef}
         role="dialog"
+        aria-modal="true"
         aria-label="Settings"
+        tabIndex={-1}
         onClick={e => e.stopPropagation()}
       >
         <header className="set-head">
@@ -96,9 +151,11 @@ export default function Settings({ onClose }) {
           {SECTIONS.map(s => (
             <button
               key={s.id}
+              id={`set-tab-${s.id}`}
               type="button"
               role="tab"
               aria-selected={section === s.id}
+              aria-controls="set-tabpanel"
               className={`ob-tab ${section === s.id ? 'active' : ''}`}
               onClick={() => setSection(s.id)}
             >
@@ -107,7 +164,12 @@ export default function Settings({ onClose }) {
           ))}
         </nav>
 
-        <div className="set-body">
+        <div
+          className="set-body"
+          id="set-tabpanel"
+          role="tabpanel"
+          aria-labelledby={`set-tab-${section}`}
+        >
           {section === 'ai' && (
             <>
               <p className="set-lead">
@@ -136,6 +198,7 @@ export default function Settings({ onClose }) {
                       key={opt.id}
                       type="button"
                       className={`set-choice ${settings?.classifyBackend === opt.id ? 'active' : ''}`}
+                      aria-pressed={settings?.classifyBackend === opt.id}
                       onClick={() => patch({ classifyBackend: opt.id })}
                     >
                       <span className="set-choice-label">{opt.label}</span>
@@ -185,6 +248,7 @@ export default function Settings({ onClose }) {
                       key={mode.id}
                       type="button"
                       className={`set-choice ${settings?.viewMode === mode.id ? 'active' : ''}`}
+                      aria-pressed={settings?.viewMode === mode.id}
                       onClick={() => { patch({ viewMode: mode.id }); applyViewMode(mode.id); }}
                       disabled={!isDesktop}
                     >
@@ -217,6 +281,7 @@ export default function Settings({ onClose }) {
                       key={font.id}
                       type="button"
                       className={`set-choice ${(settings?.readingFont || DEFAULT_FONT) === font.id ? 'active' : ''}`}
+                      aria-pressed={(settings?.readingFont || DEFAULT_FONT) === font.id}
                       onClick={() => { patch({ readingFont: font.id }); applyFont(font.id); }}
                     >
                       <span className="set-choice-label">{font.label}</span>

@@ -88,9 +88,11 @@ export default function Sidebar({
       {/* Filter */}
       <div className="sidebar-section">
         <div className="sidebar-section-title">Filter</div>
-        <div
+        <button
+          type="button"
           className={`sidebar-item ${currentFilter === 'all' && !showUnreadOnly ? 'active' : ''}`}
           onClick={() => onFilterChange('all')}
+          aria-pressed={currentFilter === 'all' && !showUnreadOnly}
         >
           <span className="sidebar-item-left">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -99,11 +101,13 @@ export default function Sidebar({
             All Bookmarks
           </span>
           <span className="sidebar-badge">{total}</span>
-        </div>
+        </button>
 
-        <div
+        <button
+          type="button"
           className={`sidebar-item ${showUnreadOnly ? 'active' : ''}`}
           onClick={onToggleUnread}
+          aria-pressed={showUnreadOnly}
         >
           <span className="sidebar-item-left">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -112,7 +116,7 @@ export default function Sidebar({
             Unread Only
           </span>
           <span className="sidebar-badge">{unreadCount}</span>
-        </div>
+        </button>
       </div>
 
       {/* Sources — where a bookmark came from, not which backend syncs it.
@@ -144,33 +148,48 @@ export default function Sidebar({
                 (actionable ? ' is-actionable' : '') +
                 (selected ? ' active' : '')
               }
-              onClick={() => onSourceClick?.(id)}
-              title={empty ? src.emptyHint : `${count} from ${src.label}`}
             >
-              <span className="sidebar-item-left">
-                {/* Colour is the signal. An empty source inherits the row's
-                    grey rather than wearing its brand colour. */}
-                <SourceIcon source={id} size={16} style={empty ? undefined : { color: src.accent }} />
-                {src.label}
-              </span>
+              {/* The row holds two controls — filter by this source, and go to
+                  its own surface — so the row itself cannot be one: a button
+                  inside a button is invalid, and one of the two stops working.
+                  The label takes the row's padding with it, so everything left
+                  of the badge still filters. */}
+              <button
+                type="button"
+                className="source-main"
+                onClick={() => onSourceClick?.(id)}
+                aria-pressed={selected}
+                title={empty ? src.emptyHint : `${count} from ${src.label}`}
+              >
+                <span className="sidebar-item-left">
+                  {/* Colour is the signal. An empty source inherits the row's
+                      grey rather than wearing its brand colour. */}
+                  <SourceIcon source={id} size={16} style={empty ? undefined : { color: src.accent }} />
+                  {src.label}
+                </span>
+              </button>
               {/* Selected: a way out, so leaving a source doesn't mean hunting
                   for which other row resets it.
                   Otherwise: the badge jumps straight to the source's own
                   surface — "Add" when it holds nothing, "Open" when it does. */}
               {selected ? (
                 <button
+                  type="button"
                   className="sidebar-badge src-action is-clear"
                   onClick={e => { e.stopPropagation(); onSourceClick?.(id); }}
                   title={`Stop filtering by ${src.label}`}
+                  aria-label={`Stop filtering by ${src.label}`}
                 >
                   <span className="src-count">{count}</span>
                   <span className="src-add">✕</span>
                 </button>
               ) : src.browseLabel ? (
                 <button
+                  type="button"
                   className="sidebar-badge src-action"
                   onClick={e => { e.stopPropagation(); onSourceAction?.(id); }}
                   title={empty ? src.emptyHint : `Open ${src.browseLabel}`}
+                  aria-label={empty ? src.emptyHint : `Open ${src.browseLabel}`}
                 >
                   <span className="src-count">{count}</span>
                   <span className="src-add">{empty ? 'Add' : 'Open'}</span>
@@ -187,9 +206,11 @@ export default function Sidebar({
       {favTotal > 0 && (
         <div className="sidebar-section">
           <div className="sidebar-section-title">Favourites</div>
-          <div
+          <button
+            type="button"
             className={`sidebar-fav-item ${currentFilter === 'fav:all' ? 'active' : ''}`}
             onClick={() => onFilterChange('fav:all')}
+            aria-pressed={currentFilter === 'fav:all'}
           >
             <span className="sidebar-item-left">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b">
@@ -198,7 +219,7 @@ export default function Sidebar({
               All Favourites
             </span>
             <span className="fav-badge">{favTotal}</span>
-          </div>
+          </button>
           {sortedFavs.length > FAV_SEARCH_FROM && (
             <div className="cat-search-wrap">
               <input
@@ -219,23 +240,20 @@ export default function Sidebar({
             {visibleFavs.length === 0
               ? <div className="cat-no-results">No folders match</div>
               : visibleFavs.map(([folder, count]) => (
-                <div
-                  key={folder}
-                  className={`sidebar-fav-item ${currentFilter === `fav:${folder}` ? 'active' : ''}`}
-                  onClick={() => renamingFav !== folder && onFilterChange(`fav:${folder}`)}
-                  onDoubleClick={() => { setRenamingFav(folder); setRenameText(folder); }}
-                  title="Double-click to rename"
-                >
-                  <span className="sidebar-item-left">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b">
-                      <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>
-                    </svg>
-                    {renamingFav === folder ? (
+                renamingFav === folder ? (
+                  // A row being renamed is a text field, not a control — and a
+                  // text field inside a <button> is invalid markup that the
+                  // browser resolves by eating the typing.
+                  <div key={folder} className="sidebar-fav-item is-renaming">
+                    <span className="sidebar-item-left">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" aria-hidden="true">
+                        <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>
+                      </svg>
                       <input
                         className="fav-rename-input"
                         autoFocus
+                        aria-label={`Rename folder ${folder}`}
                         value={renameText}
-                        onClick={e => e.stopPropagation()}
                         onChange={e => setRenameText(e.target.value)}
                         onKeyDown={e => {
                           if (e.key === 'Enter') commitFavRename();
@@ -243,10 +261,28 @@ export default function Sidebar({
                         }}
                         onBlur={commitFavRename}
                       />
-                    ) : folder}
-                  </span>
-                  <span className="fav-badge">{count}</span>
-                </div>
+                    </span>
+                    <span className="fav-badge">{count}</span>
+                  </div>
+                ) : (
+                  <button
+                    key={folder}
+                    type="button"
+                    className={`sidebar-fav-item ${currentFilter === `fav:${folder}` ? 'active' : ''}`}
+                    onClick={() => onFilterChange(`fav:${folder}`)}
+                    onDoubleClick={() => { setRenamingFav(folder); setRenameText(folder); }}
+                    aria-pressed={currentFilter === `fav:${folder}`}
+                    title="Double-click to rename"
+                  >
+                    <span className="sidebar-item-left">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" aria-hidden="true">
+                        <path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/>
+                      </svg>
+                      {folder}
+                    </span>
+                    <span className="fav-badge">{count}</span>
+                  </button>
+                )
               ))
             }
           </div>
@@ -274,12 +310,18 @@ export default function Sidebar({
           <>
             <div className="cat-chips">
               {[...selectedCategories].map(cat => (
-                <span key={cat} className="cat-chip" onClick={() => onToggleCategory(cat)}>
-                  {cap(cat)}<span className="cat-chip-x">×</span>
-                </span>
+                <button
+                  key={cat}
+                  type="button"
+                  className="cat-chip"
+                  onClick={() => onToggleCategory(cat)}
+                  aria-label={`Remove ${cap(cat)} filter`}
+                >
+                  {cap(cat)}<span className="cat-chip-x" aria-hidden="true">×</span>
+                </button>
               ))}
             </div>
-            <span className="cat-clear-all" onClick={onClearCategories}>Clear all</span>
+            <button type="button" className="cat-clear-all" onClick={onClearCategories}>Clear all</button>
           </>
         )}
 
@@ -287,17 +329,19 @@ export default function Sidebar({
           {orderedCats.length === 0
             ? <div className="cat-no-results">No categories match</div>
             : orderedCats.map(([cat, count]) => (
-              <div
+              <button
                 key={cat}
+                type="button"
                 className={`sidebar-item cat-item ${selectedCategories.has(cat) ? 'active' : ''}`}
                 onClick={() => onToggleCategory(cat)}
+                aria-pressed={selectedCategories.has(cat)}
               >
                 <span className="sidebar-item-left">
                   <span className="sidebar-dot" style={{ background: getDotColor(cat) }} />
                   {cap(cat)}
                 </span>
                 <span className="sidebar-badge">{count}</span>
-              </div>
+              </button>
             ))
           }
         </div>
@@ -318,10 +362,12 @@ export default function Sidebar({
           {folderIndex.map(entry => {
             const src = getBookmarkSource(entry.source);
             return (
-              <div
+              <button
                 key={entry.key}
+                type="button"
                 className={`sidebar-item folder-item ${folderPick?.key === entry.key ? 'active' : ''}`}
                 onClick={() => onFolderClick?.(entry)}
+                aria-pressed={folderPick?.key === entry.key}
                 title={`${entry.count} from ${src.label}`}
               >
                 <span className="sidebar-item-left">
@@ -330,7 +376,7 @@ export default function Sidebar({
                   {entry.ambiguous && <span className="folder-qualifier">{src.short || src.label}</span>}
                 </span>
                 <span className="sidebar-badge">{entry.count}</span>
-              </div>
+              </button>
             );
           })}
         </div>

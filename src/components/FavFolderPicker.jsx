@@ -148,6 +148,9 @@ export default function FavFolderPicker({
       <button
         className={`${buttonClassName}${isFav ? ' active' : ''}`}
         title={isFav ? `In: ${folders.join(', ')}` : 'Add to favourites'}
+        aria-label={isFav ? `In favourites: ${folders.join(', ')}` : 'Add to favourites'}
+        aria-pressed={isFav}
+        aria-expanded={open}
         onClick={e => {
           e.stopPropagation();
           if (!open) placeFromTrigger();

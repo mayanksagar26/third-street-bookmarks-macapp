@@ -88,8 +88,15 @@ export default function RightPanel({
   useEffect(() => {
     if (!menuOpen) return;
     const close = (e) => { if (!menuRef.current?.contains(e.target)) setMenuOpen(false); };
+    // Escape closes it too. Click-outside is the mouse's way out; without this
+    // a keyboard user who opened the menu had none.
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false); };
     document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [menuOpen]);
 
   const authors = useMemo(() => {
@@ -137,7 +144,16 @@ export default function RightPanel({
     <aside className="right-panel">
       {/* Profile / Tools */}
       <div className="panel-card profile-card" ref={menuRef}>
-        <button className="profile-btn" onClick={() => setMenuOpen(p => !p)}>
+        {/* A disclosure, not a `role="menu"`: the items are ordinary buttons in
+            the tab order, and claiming menu semantics would promise arrow-key
+            navigation this doesn't implement. */}
+        <button
+          type="button"
+          className="profile-btn"
+          onClick={() => setMenuOpen(p => !p)}
+          aria-expanded={menuOpen}
+          aria-haspopup="true"
+        >
           <div className="profile-avatar" style={{background:'transparent',border:'none',padding:0,overflow:'hidden',borderRadius:'50%',width:32,height:32,flexShrink:0}}>
             <img src="/tj.png" alt="TJ" style={{width:'100%',height:'100%',objectFit:'cover',borderRadius:'50%'}}/>
           </div>
@@ -208,23 +224,25 @@ export default function RightPanel({
         <div className="panel-card-title">Voices</div>
         <div className="voices-list">
           {authors.map(a => (
-            <div
+            <button
               key={a.handle}
+              type="button"
               className={`top-author ${currentVoice === a.handle ? 'active' : ''}`}
               onClick={() => onVoiceClick(a.handle)}
+              aria-pressed={currentVoice === a.handle}
               title={currentVoice === a.handle
                 ? `Showing only @${a.handle} — click to clear`
                 : `Show only @${a.handle}`}
             >
-              <div className="top-author-avatar">
+              <span className="top-author-avatar">
                 {a.img && <img src={a.img} alt="" loading="lazy" onError={e => e.target.style.display='none'} />}
-              </div>
-              <div className="top-author-info">
-                <div className="top-author-name">{a.name || a.handle}</div>
-                <div className="top-author-handle">@{a.handle}</div>
-              </div>
-              <div className="top-author-count">{a.count}</div>
-            </div>
+              </span>
+              <span className="top-author-info">
+                <span className="top-author-name">{a.name || a.handle}</span>
+                <span className="top-author-handle">@{a.handle}</span>
+              </span>
+              <span className="top-author-count">{a.count}</span>
+            </button>
           ))}
         </div>
       </div>
@@ -240,9 +258,12 @@ export default function RightPanel({
           Sync &amp; Classify
           <span className="panel-card-qualifier">X only</span>
           <button
+            type="button"
             className={`sync-settings-gear ${syncSettingsOpen ? 'open' : ''}`}
             onClick={() => setSyncSettingsOpen(p => !p)}
             title="Classify engine settings"
+            aria-label="Sync and classify settings"
+            aria-expanded={syncSettingsOpen}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
@@ -258,8 +279,10 @@ export default function RightPanel({
             {SOURCES.map(s => (
               <button
                 key={s.id}
+                type="button"
                 className={`sync-backend-item ${syncSource === s.id ? 'active' : ''}`}
                 onClick={() => onSetSyncSource(s.id)}
+                aria-pressed={syncSource === s.id}
               >
                 <span>{s.icon} {s.label}{installedMap[s.id] === false ? ' · not installed' : ''}</span>
                 <span className="sync-backend-hint">{s.blurb}</span>
@@ -273,8 +296,10 @@ export default function RightPanel({
             {browserInfo.map(b => (
               <button
                 key={b.id}
+                type="button"
                 className={`sync-backend-item ${syncBrowser === b.id ? 'active' : ''}`}
                 onClick={() => onSetSyncBrowser(b.id)}
+                aria-pressed={syncBrowser === b.id}
               >
                 <span>{b.label}</span>
                 <span className="sync-backend-hint">{lastActiveHint(b.lastActive)}</span>
@@ -292,8 +317,10 @@ export default function RightPanel({
             ].map(b => (
               <button
                 key={b.id}
+                type="button"
                 className={`sync-backend-item ${classifyBackend === b.id ? 'active' : ''}`}
                 onClick={() => onSetClassifyBackend(b.id)}
+                aria-pressed={classifyBackend === b.id}
               >
                 <span>{b.label}</span>
                 <span className="sync-backend-hint">{b.hint}</span>
@@ -303,7 +330,7 @@ export default function RightPanel({
           </>
         )}
 
-        <button className={btnClass} onClick={onSync}>
+        <button type="button" className={btnClass} onClick={onSync}>
           <svg viewBox="0 0 24 24" fill="currentColor" className={syncState.status === 'running' ? 'spin' : ''}>
             <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
           </svg>
@@ -313,6 +340,8 @@ export default function RightPanel({
           <div
             className={`action-status ${syncState.status === 'error' ? 'error' : ''}`.trim()}
             style={{ marginTop: 6 }}
+            role="status"
+            aria-live="polite"
           >
             {syncState.msg}
           </div>

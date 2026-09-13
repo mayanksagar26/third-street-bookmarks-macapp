@@ -7,6 +7,11 @@ bookmarks.json
 settings.json
 *.log
 
+# The API credential a standalone `node server/index.js` mints into its data
+# directory, which is the repo root when Tauri isn't setting one. It is a
+# credential; it must never be committable.
+auth-token
+
 # Per-source collections (Hacker News, YouTube, Instagram, saved links) and the
 # app-owned state DB. A standalone `node server/index.js` writes these into the
 # repo root, since that is its data directory when Tauri isn't setting one.

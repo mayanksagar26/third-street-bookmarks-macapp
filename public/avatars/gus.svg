@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Gus">
+  <title>Gus</title>
+  <rect width="128" height="128" fill="#cfe3b8"/>
+  <path d="M8 130 C8 106 30.0 95 64 95 C98.0 95 120 106 120 130 Z" fill="#4f8a3c" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M52 96 Q64 104 76 96" fill="none" stroke="#35652a" stroke-width="3"/>
+  <path d="M55 84 L55 99 Q64 104 73 99 L73 84 Z" fill="#f5cfae" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="36" cy="66" rx="7" ry="9" fill="#f5cfae" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="92" cy="66" rx="7" ry="9" fill="#f5cfae" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="64" cy="63" rx="25" ry="28" fill="#f5cfae" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M38 55 C36 30 92 30 90 55 C84 47 44 47 38 55 Z" fill="#ecc85a" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="54" cy="64" r="2.6" fill="#2a1f1a"/>
+  <circle cx="74" cy="64" r="2.6" fill="#2a1f1a"/>
+  <rect x="43" y="56" width="20" height="15" rx="3" fill="#ffffff" fill-opacity="0.25" stroke="#7c7f84" stroke-width="2.8"/>
+  <rect x="65" y="56" width="20" height="15" rx="3" fill="#ffffff" fill-opacity="0.25" stroke="#7c7f84" stroke-width="2.8"/>
+  <path d="M48 51 q5 -3 10 0 M70 51 q5 -3 10 0" fill="none" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M57 80 q7 3 14 -1" fill="none" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

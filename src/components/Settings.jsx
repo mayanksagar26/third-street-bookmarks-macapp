@@ -2,6 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { FONTS, DEFAULT_FONT, applyFont } from '../fonts';
 import AgentPicker, { useRuntimes } from './AgentPicker';
 import BookmarkFinder from './BookmarkFinder';
+import {
+  AVATARS,
+  CUSTOM_AVATAR,
+  DEFAULT_AVATAR,
+  announceAvatarChange,
+  loadCustomAvatar,
+  squareImage,
+} from '../avatars';
 
 // Settings is onboarding without the sequence.
 //
@@ -11,6 +19,7 @@ import BookmarkFinder from './BookmarkFinder';
 // changing agents there never feels like a different feature from choosing one.
 
 const SECTIONS = [
+  { id: 'profile', label: 'Profile' },
   { id: 'ai', label: 'AI' },
   { id: 'bookmarks', label: 'Bookmarks' },
   { id: 'window', label: 'Window' },
@@ -51,8 +60,145 @@ function focusables(root) {
   )].filter(el => el.offsetParent !== null || el === document.activeElement);
 }
 
-export default function Settings({ onClose }) {
-  const [section, setSection] = useState('ai');
+/**
+ * Pick a profile picture: TJ (the default), another Recess character, or a
+ * picture of your own.
+ */
+function AvatarPicker({ value, hasUpload, onPick }) {
+  const [customSrc, setCustomSrc] = useState(null);
+  const [error, setError] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  // Bumped on each successful upload, so replacing a picture re-fetches it.
+  const [uploadVersion, setUploadVersion] = useState(0);
+  const fileRef = useRef(null);
+
+  // Show an earlier upload as a choice even while a character is selected, so
+  // switching back to it doesn't mean uploading it again.
+  useEffect(() => {
+    if (!hasUpload) return undefined;
+    let src = null;
+    let cancelled = false;
+    loadCustomAvatar()
+      .then(url => {
+        if (cancelled) { if (url) URL.revokeObjectURL(url); return; }
+        src = url;
+        setCustomSrc(prev => { if (prev && prev !== url) URL.revokeObjectURL(prev); return url; });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; if (src) URL.revokeObjectURL(src); };
+  }, [hasUpload, uploadVersion]);
+
+  async function upload(file) {
+    if (!file) return;
+    setError(null);
+    if (!file.type.startsWith('image/')) {
+      setError('Pick an image file — PNG, JPEG, WebP or similar.');
+      return;
+    }
+    setUploading(true);
+    try {
+      const dataUrl = await squareImage(file);
+      const res = await fetch('/api/avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataUrl }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Upload failed');
+      setUploadVersion(v => v + 1);
+      onPick(CUSTOM_AVATAR, { saved: true });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  const current = value || DEFAULT_AVATAR;
+
+  return (
+    <div className="avatar-picker">
+    <div className="avatar-grid">
+      <div
+        className="avatar-options"
+        role="radiogroup"
+        aria-label="Profile picture"
+        onKeyDown={e => {
+          // Arrow keys move between choices, as a radio group promises.
+          const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+          if (!step) return;
+          const radios = [...e.currentTarget.querySelectorAll('[role="radio"]')];
+          const idx = radios.indexOf(document.activeElement);
+          if (idx < 0) return;
+          e.preventDefault();
+          const next = radios[(idx + step + radios.length) % radios.length];
+          next.focus();
+          next.click();
+        }}
+      >
+      {AVATARS.map(a => (
+        <button
+          key={a.id}
+          type="button"
+          role="radio"
+          aria-checked={current === a.id}
+          className={`avatar-choice ${current === a.id ? 'active' : ''}`}
+          onClick={() => onPick(a.id)}
+        >
+          <img src={a.src} alt="" className="avatar-choice-img" />
+          <span className="avatar-choice-label">
+            {a.label}{a.id === DEFAULT_AVATAR ? ' · default' : ''}
+          </span>
+        </button>
+      ))}
+
+      {customSrc && (
+        <button
+          type="button"
+          role="radio"
+          aria-checked={current === CUSTOM_AVATAR}
+          className={`avatar-choice ${current === CUSTOM_AVATAR ? 'active' : ''}`}
+          onClick={() => onPick(CUSTOM_AVATAR)}
+        >
+          <img src={customSrc} alt="" className="avatar-choice-img" />
+          <span className="avatar-choice-label">Your picture</span>
+        </button>
+      )}
+      </div>
+
+      <button
+        type="button"
+        className="avatar-choice avatar-upload"
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+        aria-describedby={error ? 'avatar-upload-error' : undefined}
+      >
+        <span className="avatar-choice-img avatar-upload-icon" aria-hidden="true">
+          {uploading ? '…' : '+'}
+        </span>
+        <span className="avatar-choice-label">
+          {uploading ? 'Uploading' : customSrc ? 'Replace yours' : 'Upload'}
+        </span>
+      </button>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={e => upload(e.target.files?.[0])}
+      />
+
+    </div>
+      {error && <p id="avatar-upload-error" className="avatar-error" role="alert">{error}</p>}
+    </div>
+  );
+}
+
+export default function Settings({ onClose, initialSection }) {
+  const [section, setSection] = useState(
+    SECTIONS.some(s => s.id === initialSection) ? initialSection : 'profile',
+  );
   const [settings, setSettings] = useState(null);
   const { runtimes, loading, active, refresh } = useRuntimes();
   const panelRef = useRef(null);
@@ -170,6 +316,25 @@ export default function Settings({ onClose }) {
           role="tabpanel"
           aria-labelledby={`set-tab-${section}`}
         >
+          {section === 'profile' && (
+            <>
+              <p className="set-lead">
+                The picture on your Profile button. TJ is the default; the rest
+                of the Recess gang are here too, or upload your own. An upload is
+                cropped to a square and kept in your data folder.
+              </p>
+              <AvatarPicker
+                value={settings?.avatar}
+                hasUpload={!!settings?.avatarUploaded}
+                onPick={(id, { saved } = {}) => {
+                  if (saved) setSettings(s => ({ ...s, avatar: id, avatarUploaded: true }));
+                  const done = saved ? Promise.resolve() : patch({ avatar: id });
+                  done.then(announceAvatarChange);
+                }}
+              />
+            </>
+          )}
+
           {section === 'ai' && (
             <>
               <p className="set-lead">

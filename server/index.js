@@ -534,12 +534,15 @@ function writeBookmarks(data) {
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 app.get('/api/settings', (req, res) => {
-  res.json(readSettings());
+  // `avatarUploaded` is derived, not stored: it saves the client probing
+  // /api/avatar (and logging a 404) when there is nothing to show.
+  res.json({ ...readSettings(), avatarUploaded: !!avatarFile() });
 });
 
 app.post('/api/settings', (req, res) => {
   try {
     const settings = { ...readSettings(), ...req.body };
+    delete settings.avatarUploaded;
     writeSettings(settings);
     res.json(settings);
   } catch (e) {
@@ -549,6 +552,56 @@ app.post('/api/settings', (req, res) => {
 
 // Which sources exist + whether their CLI is detected on this machine. The UI
 // uses `installed` only for a hint; the user still picks the source manually.
+// ── Profile picture ───────────────────────────────────────────────────────────
+// Presets are static files in the client; only an upload needs the server. The
+// client sends a small square JPEG as a data URL, and it lands in the data
+// directory as avatar.<ext>, replacing any earlier upload.
+const AVATAR_TYPES = {
+  png:  { mime: 'image/png',  magic: [0x89, 0x50, 0x4e, 0x47] },
+  jpeg: { mime: 'image/jpeg', magic: [0xff, 0xd8, 0xff] },
+  webp: { mime: 'image/webp', magic: [0x52, 0x49, 0x46, 0x46] },
+};
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+
+function avatarFile() {
+  for (const ext of Object.keys(AVATAR_TYPES)) {
+    const file = path.join(DATA_DIR, `avatar.${ext}`);
+    if (fs.existsSync(file)) return { file, ext };
+  }
+  return null;
+}
+
+app.post('/api/avatar', (req, res) => {
+  const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body?.dataUrl || ''));
+  if (!match) return res.status(400).json({ error: 'Send a PNG, JPEG or WebP image' });
+
+  const [, ext, b64] = match;
+  const bytes = Buffer.from(b64, 'base64');
+  if (bytes.length > AVATAR_MAX_BYTES) return res.status(413).json({ error: 'That picture is too large' });
+  // The declared type is the client's claim; the first bytes are the file's.
+  if (!AVATAR_TYPES[ext].magic.every((b, i) => bytes[i] === b)) {
+    return res.status(400).json({ error: 'That file is not the image it says it is' });
+  }
+
+  try {
+    for (const other of Object.keys(AVATAR_TYPES)) {
+      fs.rmSync(path.join(DATA_DIR, `avatar.${other}`), { force: true });
+    }
+    fs.writeFileSync(path.join(DATA_DIR, `avatar.${ext}`), bytes);
+    writeSettings({ ...readSettings(), avatar: 'custom' });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/avatar', (req, res) => {
+  const found = avatarFile();
+  if (!found) return res.status(404).json({ error: 'No picture uploaded' });
+  res.setHeader('Cache-Control', 'no-store');
+  res.type(AVATAR_TYPES[found.ext].mime).sendFile(found.file);
+});
+
 app.get('/api/sources', (req, res) => {
   const active = readSettings().syncSource || 'fieldtheory';
   res.json({

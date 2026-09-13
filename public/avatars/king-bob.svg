@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="King Bob">
+  <title>King Bob</title>
+  <rect width="128" height="128" fill="#e9d4f3"/>
+  <path d="M4 130 C4 106 28.0 95 64 95 C100.0 95 124 106 124 130 Z" fill="#c7372f" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M42 98 Q64 90 86 98 L82 108 Q64 101 46 108 Z" fill="#2b5ea8" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M50 103 Q64 99 78 103 L76 130 L52 130 Z" fill="#ffffff" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <text x="64" y="126" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="15" fill="#2b5ea8">8</text>
+  <path d="M55 84 L55 99 Q64 104 73 99 L73 84 Z" fill="#f1c6a0" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M37 60 Q36 74 42 80 M91 60 Q92 74 86 80" fill="none" stroke="#1b1b1b" stroke-width="5" stroke-linecap="round"/>
+  <ellipse cx="37" cy="65" rx="5" ry="7" fill="#f1c6a0" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="91" cy="65" rx="5" ry="7" fill="#f1c6a0" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <ellipse cx="64" cy="62" rx="26" ry="29" fill="#f1c6a0" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M35 54 C35 30 93 30 93 54 Z" fill="#f3c32f" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M36 44 L41 18 L52 36 L64 12 L76 36 L87 18 L92 44 Z" fill="#f3c32f" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="33" y="48" width="62" height="9" rx="4" fill="#e2ad1f" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <text x="64" y="44" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="15" fill="#7a4a1f">B</text>
+  <path d="M46 63 Q64 57 82 63" fill="none" stroke="#1b1b1b" stroke-width="3.2" stroke-linecap="round"/>
+  <ellipse cx="54" cy="68" rx="3.2" ry="3" fill="#2a1f1a"/>
+  <ellipse cx="74" cy="68" rx="3.2" ry="3" fill="#2a1f1a"/>
+  <path d="M50 66.5 h8 M70 66.5 h8" stroke="#f1c6a0" stroke-width="2.4"/>
+  <path d="M50 66 h8 M70 66 h8" fill="none" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M63 71 q4 3 0 6" fill="none" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M55 81 q10 4 18 -2" fill="none" stroke="#2a1f1a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

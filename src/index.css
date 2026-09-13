@@ -36,6 +36,8 @@
 .sidebar-item,
 .sidebar-fav-item,
 .source-main,
+.fav-main,
+.fav-pin-btn,
 .top-author,
 .cat-chip,
 .cat-clear-all,
@@ -606,7 +608,47 @@ body::before {
 .star-wrap { position: relative; display: inline-flex; }
 /* Portalled to <body> and placed from the trigger's rect, so the chat's
    scrolling result list cannot clip it. */
-.fav-popup-fixed { position: fixed; top: 0; left: 0; right: auto; }
+.fav-popup-fixed {
+  position: fixed; top: 0; left: 0; right: auto;
+  animation: favPopupIn 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes favPopupIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* "Create folder" appears the moment what you typed isn't a folder yet, first
+   in the list so Enter and the eye agree on what will happen. */
+.fav-popup-create {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 7px 8px; margin-bottom: 2px; border-radius: 8px;
+  background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.28);
+  color: var(--text-primary); font: inherit; font-size: 13px; text-align: left;
+  cursor: pointer; animation: favRowIn 160ms ease-out;
+  transition: background 0.12s, border-color 0.12s;
+}
+.fav-popup-create:hover { background: rgba(245, 158, 11, 0.18); border-color: rgba(245, 158, 11, 0.45); }
+.fav-popup-create strong { font-weight: 600; color: #fbbf24; }
+.fav-popup-create-plus {
+  width: 15px; height: 15px; flex-shrink: 0; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #f59e0b; color: #000;
+}
+.fav-popup-kbd {
+  margin-left: auto; flex-shrink: 0;
+  font: inherit; font-size: 12px; color: var(--text-secondary);
+  padding: 0 5px; border: 1px solid var(--border); border-radius: 4px;
+}
+/* The folder you just made or picked, arriving where it now lives. */
+.fav-popup-folder.is-new { animation: favRowIn 220ms ease-out, favRowFlash 900ms ease-out; }
+@keyframes favRowIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes favRowFlash {
+  0%, 30% { background: rgba(245, 158, 11, 0.16); }
+  100%    { background: transparent; }
+}
 .fav-popup-folder {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 8px; border-radius: 8px;
@@ -630,8 +672,13 @@ body::before {
 }
 .fav-check-box.checked { background: #f59e0b; border-color: #f59e0b; color: #000; }
 
+.fav-popup-search-wrap { position: relative; margin-bottom: 6px; }
+.fav-popup-search-icon {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  color: var(--text-tertiary); pointer-events: none;
+}
 .fav-popup-search {
-  width: 100%; padding: 6px 10px; margin-bottom: 6px;
+  width: 100%; padding: 7px 10px 7px 29px;
   background: rgba(255,255,255,0.05);
   border: 1px solid var(--border); border-radius: 8px;
   color: var(--text-primary); font-size: 13px; outline: none;
@@ -661,23 +708,9 @@ body::before {
   color: var(--text-primary); font-size: 14px; outline: none;
 }
 .fav-popup-divider { height: 1px; background: var(--border); margin: 6px 0; }
-.fav-popup-input {
-  width: 100%; padding: 8px 10px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid var(--border); border-radius: 8px;
-  color: var(--text-primary); font-size: 14px; outline: none;
-  transition: border-color 0.15s;
-}
-.fav-popup-input:focus { border-color: var(--accent); }
-.fav-popup-actions { display: flex; gap: 6px; margin-top: 7px; }
-.fav-popup-add {
-  flex: 1; padding: 8px; background: var(--accent); color: #fff;
-  border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer;
-  transition: background 0.15s;
-}
-.fav-popup-add:hover { background: var(--accent-hover); }
+.fav-popup-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .fav-popup-done {
-  padding: 8px 14px; background: none; color: var(--text-secondary);
+  padding: 6px 14px; background: none; color: var(--text-secondary);
   border: 1px solid var(--border); border-radius: 8px; font-size: 14px; cursor: pointer;
 }
 .fav-popup-done:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
@@ -743,9 +776,46 @@ body::before {
   padding: 1px 7px; min-width: 28px; text-align: center;
 }
 .sidebar-fav-item.active .fav-badge { background: #f59e0b; color: #000; border-color: #f59e0b; }
-.fav-list {
+.fav-list,
+.folder-list {
   max-height: 240px; overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.fav-list::-webkit-scrollbar,
+.folder-list::-webkit-scrollbar,
+.category-list::-webkit-scrollbar { width: 6px; }
+.fav-list::-webkit-scrollbar-thumb,
+.folder-list::-webkit-scrollbar-thumb,
+.category-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+
+/* A folder row holds two controls — open it, pin it — so the row is a
+   container and the label button carries the padding, like the source rows. */
+.sidebar-fav-item.fav-row { padding: 0 20px 0 0; gap: 4px; animation: favRowIn 180ms ease-out; }
+.fav-row .fav-main {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center;
+  padding: 9px 0 9px 20px; cursor: pointer;
+}
+.fav-row .sidebar-item-left { min-width: 0; }
+.fav-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-pin-btn {
+  width: 24px; height: 24px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px; cursor: pointer;
+  color: var(--text-tertiary);
+  opacity: 0; transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.fav-row:hover .fav-pin-btn,
+.fav-pin-btn:focus-visible { opacity: 1; }
+.fav-pin-btn:hover { color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+/* A pinned row says so without hovering: its pin stays, quietly. */
+.fav-row.is-pinned .fav-pin-btn { opacity: 1; color: rgba(245, 158, 11, 0.7); }
+.fav-row.is-pinned .fav-pin-btn:hover { color: #f59e0b; }
+.fav-pinned {
+  margin: 2px 0 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
 }
 
 /* ── View on X ── */
@@ -1498,6 +1568,7 @@ body::before {
 .profile-menu-item:hover { background: rgba(255,255,255,0.06); }
 .profile-menu-item.active { color: var(--accent); }
 .profile-menu-icon { color: var(--text-secondary); flex-shrink: 0; }
+.profile-menu-avatar { display: block; width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
 .profile-menu-item.active .profile-menu-icon { color: var(--accent); }
 .profile-menu-info { flex: 1; }
 .profile-menu-label { font-size: 13px; font-weight: 600; }
@@ -3284,3 +3355,125 @@ kbd {
 
 /* The pencil stays lit while its note is open. */
 .tw-btn.note-btn.open { color: var(--accent); background: rgba(55, 180, 255, 0.12); }
+
+/* ── Chat: the launcher and the side window ───────────────────────────────────
+   The chat lives in the corner until you want it. The launcher opens a small
+   window that slides in from the right edge; full screen is one click from its
+   title bar and puts the chat back in the middle column. */
+.chat-launcher {
+  position: fixed; right: 22px; bottom: 22px; z-index: 900;
+  width: 52px; height: 52px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: var(--accent-gradient); color: #fff;
+  box-shadow: var(--rim-strong), 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(55, 180, 255, 0.18);
+  cursor: pointer;
+  animation: launcherIn 260ms cubic-bezier(0.34, 1.4, 0.64, 1);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.chat-launcher:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: var(--rim-strong), 0 14px 36px rgba(0, 0, 0, 0.55), 0 0 0 4px rgba(55, 180, 255, 0.18);
+}
+.chat-launcher:active { transform: scale(0.96); }
+.chat-launcher:focus-visible { outline-offset: 3px; border-radius: 50%; }
+/* Still answering while closed: a ring, so you know to come back. */
+.chat-launcher.is-busy::after {
+  content: ''; position: absolute; inset: -5px; border-radius: 50%;
+  border: 2px solid rgba(55, 180, 255, 0.55);
+  animation: ringExpand 1.6s ease-out infinite;
+}
+@keyframes launcherIn {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: none; }
+}
+
+.chat-dock {
+  position: fixed; right: 16px; bottom: 16px; z-index: 950;
+  width: min(400px, calc(100vw - 32px));
+  height: min(640px, calc(100vh - 32px));
+  display: flex; flex-direction: column;
+  border-radius: 18px; overflow: hidden;
+  background: var(--glass-overlay);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--rim-strong), 0 24px 70px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  transform-origin: bottom right;
+  animation: dockIn 260ms cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+.chat-dock.is-leaving { animation: dockOut 200ms cubic-bezier(0.4, 0, 1, 1) both; pointer-events: none; }
+@keyframes dockIn {
+  from { opacity: 0; transform: translateX(36px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes dockOut {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateX(36px) scale(0.97); }
+}
+
+.chat-dock-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 10px 10px 14px; flex-shrink: 0;
+  border-bottom: 1px solid var(--glass-border);
+}
+.chat-dock-mark {
+  width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(55, 180, 255, 0.12); border: 1px solid rgba(55, 180, 255, 0.22);
+  color: var(--accent);
+}
+.chat-dock-heading { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.chat-dock-title { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-dock-sub { font-size: 12px; color: var(--text-secondary); }
+.chat-dock-tools { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.chat-dock-icon,
+.chat-sys-btn.is-icon {
+  width: 30px; height: 30px; padding: 0; border: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; background: none; color: var(--text-secondary);
+  cursor: pointer; transition: background 0.12s, color 0.12s;
+}
+.chat-dock-icon:hover,
+.chat-sys-btn.is-icon:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-primary); }
+.chat-sys-btn.is-icon.active { background: rgba(55, 180, 255, 0.12); color: var(--accent); }
+
+/* Everything inside, sized for a window a third the width of the column. */
+.chat-surface.is-docked { height: 100%; }
+.is-docked .chat-sys-panel { padding: 12px 14px; }
+.is-docked .chat-empty { justify-content: flex-start; padding: 22px 16px 14px; overflow-y: auto; }
+.is-docked .chat-empty-icon { margin-bottom: 10px; }
+.is-docked .chat-title { font-size: 19px; }
+.is-docked .chat-desc { font-size: 13px; margin-bottom: 16px; }
+.is-docked .chat-backend-picker { flex-wrap: wrap; justify-content: center; }
+.is-docked .chat-chips-grid { grid-template-columns: 1fr; gap: 8px; margin-bottom: 14px; }
+.is-docked .chat-chip-item { padding: 10px 12px; }
+.is-docked .chat-messages { padding: 16px 14px; gap: 16px; }
+.is-docked .chat-bubble.user { max-width: 85%; font-size: 13.5px; }
+.is-docked .chat-assistant-msg { gap: 8px; }
+.is-docked .chat-assistant-icon { width: 24px; height: 24px; }
+.is-docked .chat-assistant-text { font-size: 13.5px; }
+.is-docked .chat-results-scroll { max-height: 300px; }
+.is-docked .chat-results-hint { display: none; }
+.is-docked .chat-tweet { padding: 10px 12px; }
+.is-docked .chat-tweet-text { font-size: 13px; }
+.is-docked .chat-input-area { padding: 10px 12px; }
+.is-docked .chat-input { height: 38px; font-size: 13.5px; }
+.is-docked .chat-send-btn { width: 38px; height: 38px; }
+
+/* Narrow window: the side window becomes the whole window. */
+@media (max-width: 700px) {
+  .chat-dock { right: 8px; bottom: 8px; width: calc(100vw - 16px); height: calc(100vh - 16px); }
+  .chat-launcher { right: 14px; bottom: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-launcher,
+  .chat-launcher.is-busy::after,
+  .fav-popup-fixed,
+  .fav-popup-create,
+  .fav-popup-folder.is-new,
+  .sidebar-fav-item.fav-row { animation: none; }
+  .chat-dock { animation: dockFade 120ms linear both; }
+  .chat-dock.is-leaving { animation: dockFade 120ms linear reverse both; }
+  @keyframes dockFade { from { opacity: 0; } to { opacity: 1; } }
+}

@@ -5,7 +5,7 @@ import SortBar from './components/SortBar';
 import StatsBar from './components/StatsBar';
 import Feed from './components/Feed';
 import RightPanel from './components/RightPanel';
-import ChatWithBookmarks from './components/ChatWithBookmarks';
+import ChatWithBookmarks, { ChatDock, useBookmarkChat } from './components/ChatWithBookmarks';
 import StatsObservations from './components/StatsObservations';
 import BookmarkPodcast from './components/BookmarkPodcast';
 import VoiceBubble from './components/VoiceBubble';
@@ -43,6 +43,15 @@ function cleanForVoice(text) {
     .trim();
 }
 
+/** Persist settings keys. Fire and forget: the UI has already moved on. */
+function saveSetting(patch) {
+  fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  }).catch(() => {});
+}
+
 function loadTtsConfig() {
   try { return JSON.parse(localStorage.getItem('ttsConfig') || 'null'); } catch { return null; }
 }
@@ -72,9 +81,11 @@ export default function App() {
   const [settingsOpen, setSettingsOpen]         = useState(false);
   // Which tab the add pane opens on when a source row sends you there.
   const [addTab, setAddTab]                     = useState('paste');
-  // The bookmark the AI button was pressed on, handed to the chat pane so it
-  // can open already asking about it.
-  const [explainTarget, setExplainTarget]       = useState(null);
+  // The small chat window at the side. Full-screen chat is still
+  // `activeMode === 'chat'`; the two never show at once.
+  const [chatDocked, setChatDocked]             = useState(false);
+  // Favourite folders kept at the top of the sidebar, in the order pinned.
+  const [pinnedFavFolders, setPinnedFavFolders] = useState([]);
   // Source is its own axis, not another value of `currentFilter`.
   //
   // While they shared one variable, picking a source *replaced* "All Bookmarks"
@@ -149,6 +160,7 @@ export default function App() {
       if (d.classifyBackend) setClassifyBackend(d.classifyBackend);
       if (d.syncSource) setSyncSource(d.syncSource);
       if (d.syncBrowser) setSyncBrowser(d.syncBrowser);
+      if (Array.isArray(d.pinnedFavFolders)) setPinnedFavFolders(d.pinnedFavFolders);
       // The reading face is a setting, so it has to be on the document before
       // the feed paints rather than after — otherwise every launch flashes the
       // system font and looks like the choice didn't stick.
@@ -211,31 +223,38 @@ export default function App() {
   // must not close over any of it. Pinned to the first render, `filtered` was
   // still empty, `pageItems.length - 1` was -1, and focus could never leave
   // -1: j/k/r/f did nothing until some unrelated change forced a re-subscribe.
-  const keyStateRef = useRef({ pageItems: [], favMap: {}, activeMode: null, focusedIdx: -1 });
+  const keyStateRef = useRef({ pageItems: [], favMap: {}, activeMode: null, focusedIdx: -1, chatDocked: false });
   useEffect(() => {
     keyStateRef.current = {
       pageItems: filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
       favMap,
       activeMode,
       focusedIdx,
+      chatDocked,
     };
   });
 
   // Keyboard shortcuts
   useEffect(() => {
     function onKey(e) {
-      const { pageItems, favMap: favs, activeMode: mode, focusedIdx: focused } = keyStateRef.current;
+      const { pageItems, favMap: favs, activeMode: mode, focusedIdx: focused, chatDocked: docked } = keyStateRef.current;
       // Ahead of the typing guard below: ⌘K reaches the chat from anywhere,
       // including with the cursor still in the search box. Checked before the
-      // bare-k feed navigation so the two don't collide.
+      // bare-k feed navigation so the two don't collide. It opens the side
+      // window; from full screen it closes the chat instead.
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setActiveMode(m => (m === 'chat' ? null : 'chat'));
+        if (mode === 'chat') setActiveMode(null);
+        else setChatDocked(d => !d);
         return;
       }
 
       if (e.key === 'Escape') {
-        if (mode) {
+        // The floating window is on top of everything else, so it goes first.
+        if (docked) {
+          e.preventDefault();
+          setChatDocked(false);
+        } else if (mode) {
           e.preventDefault();
           setActiveMode(null);
         } else {
@@ -417,7 +436,7 @@ export default function App() {
     for (const b of allBookmarks) {
       const src = b.source || 'x';
       for (const f of (b.folderNames || [])) {
-        const key = `${src} ${f}`;
+        const key = `${src}\u0000${f}`;
         counts.set(key, (counts.get(key) || 0) + 1);
         if (!bySource.has(f)) bySource.set(f, new Set());
         bySource.get(f).add(src);
@@ -425,7 +444,7 @@ export default function App() {
     }
     return [...counts.entries()]
       .map(([key, count]) => {
-        const sep = key.indexOf(' ');
+        const sep = key.indexOf('\u0000');
         const source = key.slice(0, sep);
         const name = key.slice(sep + 1);
         return { key, name, source, count, ambiguous: bySource.get(name).size > 1 };
@@ -524,6 +543,12 @@ export default function App() {
       return merged;
     });
     setCurrentFilter(prev => prev === `fav:${f}` ? `fav:${t}` : prev);
+    setPinnedFavFolders(prev => {
+      if (!prev.includes(f)) return prev;
+      const next = [...new Set(prev.map(x => (x === f ? t : x)))];
+      saveSetting({ pinnedFavFolders: next });
+      return next;
+    });
     try {
       await fetch('/api/fav-rename', {
         method: 'POST',
@@ -533,6 +558,16 @@ export default function App() {
     } catch {}
   }, []);
 
+
+  // Pin or unpin a favourite folder. New pins go to the end, so the ones you
+  // already had keep their place.
+  const handleTogglePinFolder = useCallback((folder) => {
+    setPinnedFavFolders(prev => {
+      const next = prev.includes(folder) ? prev.filter(f => f !== folder) : [...prev, folder];
+      saveSetting({ pinnedFavFolders: next });
+      return next;
+    });
+  }, []);
 
   const handleUpdateNote = useCallback(async (id, note) => {
     try {
@@ -765,10 +800,39 @@ export default function App() {
    * dropping you into an empty prompt you then have to describe the thing in.
    * A fresh object each time so pressing it twice on the same card asks again.
    */
+  const chat = useBookmarkChat({ bookmarks: allBookmarks, aiBackend });
+  // The feed's handlers are built once; the chat's functions are new every
+  // render, so they are reached through a ref rather than captured.
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
+
   const handleExplain = useCallback((bm) => {
-    setExplainTarget({ bookmark: bm, at: Date.now() });
-    setActiveMode('chat');
+    chatRef.current.runExplain(bm);
+    // Asked from a card, the answer comes in the side window so the feed you
+    // were reading stays where it is. Already in full screen, it stays there.
+    if (keyStateRef.current.activeMode !== 'chat') setChatDocked(true);
   }, []);
+
+  const openChatFull = useCallback(() => { setChatDocked(false); setActiveMode('chat'); }, []);
+  const openChatDocked = useCallback(() => { setActiveMode(m => (m === 'chat' ? null : m)); setChatDocked(true); }, []);
+
+  // The tools menu toggles modes by id. Chat opens as the side window now;
+  // full screen is one click from inside it.
+  const handleSetActiveMode = useCallback((mode) => {
+    if (mode === 'chat') { setChatDocked(d => !d); return; }
+    setActiveMode(mode);
+  }, []);
+
+  const chatSurfaceProps = {
+    chat,
+    bookmarks: allBookmarks,
+    aiBackend,
+    onSetAiBackend: handleSetAiBackend,
+    favMap,
+    favFolders,
+    onSetFavFolders: handleSetFavFolders,
+    onRenameFavFolder: handleRenameFavFolder,
+  };
 
   // One definition, two mount points: the ordinary feed, and the Saved tab
   // inside a source view. Duplicating twenty props across both is how one of
@@ -834,7 +898,6 @@ export default function App() {
         onToggleCategory={handleToggleCategory}
         onClearCategories={() => { setSelectedCats(new Set()); setCurrentPage(1); }}
         favMap={favMap}
-        favFolders={favFolders}
         folderIndex={folderIndex}
         folderPick={folderPick}
         onFolderClick={handleFolderClick}
@@ -844,20 +907,17 @@ export default function App() {
         onSourceClick={handleSourceClick}
         onSourceAction={handleSourceAction}
         onRenameFavFolder={handleRenameFavFolder}
+        pinnedFavFolders={pinnedFavFolders}
+        onTogglePinFolder={handleTogglePinFolder}
         syncSource={syncSource}
       />
       <main className="main">
         {activeMode === 'chat' ? (
           <ChatWithBookmarks
-            bookmarks={allBookmarks}
-            aiBackend={aiBackend}
-            explainTarget={explainTarget}
-            onExplainConsumed={() => setExplainTarget(null)}
-            favMap={favMap}
-            favFolders={favFolders}
-            onSetFavFolders={handleSetFavFolders}
-            onRenameFavFolder={handleRenameFavFolder}
+            {...chatSurfaceProps}
+            variant="full"
             onClose={() => setActiveMode(null)}
+            onDock={openChatDocked}
           />
         ) : activeMode === 'stats' ? (
           <StatsObservations bookmarks={allBookmarks} onClose={() => setActiveMode(null)} />
@@ -910,14 +970,14 @@ export default function App() {
         )}
       </main>
       <RightPanel
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={section => setSettingsOpen(typeof section === 'string' ? section : true)}
         bookmarks={allBookmarks}
         currentVoice={currentVoice}
         onVoiceClick={handleVoiceClick}
         syncState={syncState}
         onSync={handleSync}
-        activeMode={activeMode}
-        setActiveMode={setActiveMode}
+        activeMode={chatDocked ? 'chat' : activeMode}
+        setActiveMode={handleSetActiveMode}
         aiBackend={aiBackend}
         onSetAiBackend={handleSetAiBackend}
         classifyBackend={classifyBackend}
@@ -929,7 +989,25 @@ export default function App() {
         browserInfo={browserInfo}
         sourceInfo={sourceInfo}
       />
-      {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
+      <ChatDock
+        open={chatDocked}
+        hidden={activeMode === 'chat'}
+        busy={chat.loading}
+        onOpen={openChatDocked}
+      >
+        <ChatWithBookmarks
+          {...chatSurfaceProps}
+          variant="dock"
+          onClose={() => setChatDocked(false)}
+          onExpand={openChatFull}
+        />
+      </ChatDock>
+      {settingsOpen && (
+        <Settings
+          initialSection={typeof settingsOpen === 'string' ? settingsOpen : undefined}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
       {voicePlaying && (
         <VoiceBubble
           isPlaying={voicePlaying}

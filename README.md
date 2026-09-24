@@ -56,7 +56,7 @@ already have installed.
 
 ### Download
 
-1. Download **`Third Street Bookmarks_1.2.0_aarch64.dmg`** from the
+1. Download **`Third.Street.Bookmarks_1.2.0_aarch64.dmg`** from the
    [latest release](https://github.com/mayanksagar26/third-street-bookmarks-macapp/releases/latest),
    open it, and drag the app into **Applications**.
 2. **Install Node.js 20+** if you do not have it (`brew install node`). The app runs a

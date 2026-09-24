@@ -11,7 +11,8 @@
 </p>
 
 <p align="center">
-  <a href="#install"><strong>Install</strong></a> ·
+  <a href="https://github.com/mayanksagar26/third-street-bookmarks-macapp/releases/latest"><strong>Download for macOS</strong></a> ·
+  <a href="#install">Install</a> ·
   <a href="#what-it-looks-like">What it looks like</a> ·
   <a href="#sources">Sources</a> ·
   <a href="#security-model">Security</a> ·
@@ -19,9 +20,10 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/mayanksagar26/third-street-bookmarks-macapp/actions/workflows/ci.yml"><img src="https://github.com/mayanksagar26/third-street-bookmarks-macapp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/macOS-11%2B-black" alt="macOS 11+">
   <img src="https://img.shields.io/badge/Tauri-2-black" alt="Tauri 2">
-  <img src="https://img.shields.io/badge/local--first-yes-black" alt="Local-first">
+  <img src="https://img.shields.io/badge/license-MIT-black" alt="MIT">
 </p>
 
 ![The feed](docs/screenshots/02-feed.png)
@@ -39,7 +41,7 @@ already have installed.
 
 ## Contents
 
-- [Install](#install) — with your coding CLI, or by hand
+- [Install](#install) — download, with your coding CLI, or by hand
 - [What it looks like](#what-it-looks-like)
 - [Sources](#sources) — X, Hacker News, YouTube, Instagram, links
 - [How it fits together](#how-it-fits-together)
@@ -51,6 +53,22 @@ already have installed.
 ---
 
 ## Install
+
+### Download
+
+1. Download **`Third Street Bookmarks_1.2.0_aarch64.dmg`** from the
+   [latest release](https://github.com/mayanksagar26/third-street-bookmarks-macapp/releases/latest),
+   open it, and drag the app into **Applications**.
+2. **Install Node.js 20+** if you do not have it (`brew install node`). The app runs a
+   small Node server of its own and does not bundle one — see [Known gaps](#known-gaps).
+3. The build is **unsigned**, so macOS will refuse to open it. Clear the quarantine flag
+   once:
+
+   ```bash
+   xattr -cr "/Applications/Third Street Bookmarks.app"
+   ```
+
+The release build is for **Apple Silicon**. On an Intel Mac, build from source below.
 
 ### Let your coding CLI do it
 
@@ -452,9 +470,10 @@ These are real and worth fixing before this goes to anyone else's machine:
   but it should be consistent.
 - **`better-sqlite3` is a native module** compiled for this machine's architecture. A
   universal build needs it rebuilt for both, or the server ported to Rust.
-- **Tests cover the ingest layer only.** `npm test` runs 24 cases over id namespacing,
-  the merge rules and the four parsers — the parts with real logic, and where both bugs
-  found while building this actually lived. The sidecar logic and the routes have none.
+- **Tests cover the ingest layer only.** `npm test` runs 80 cases: id namespacing, the
+  merge rules and the four parsers, plus the Markdown renderer and the sorts — the parts
+  with real logic, and where both bugs found while building this actually lived. The
+  sidecar logic and the routes have none.
 - **Instagram and Watch Later are manual by nature.** Neither has an API, so both are
   export-driven and go stale between imports. That is a platform constraint, not
   something a later version fixes.
@@ -482,6 +501,12 @@ These are real and worth fixing before this goes to anyone else's machine:
   rather than code changes.
 - **Phase 4 — drop Node.** Port the ~25 Express routes to axum. Single static binary, no
   runtime dependency, universal build.
+
+---
+
+## Licence
+
+MIT © Mayank Sagar
 
 ---
 

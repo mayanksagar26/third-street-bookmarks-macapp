@@ -15,8 +15,9 @@
   <a href="#install">Install</a> ·
   <a href="#what-it-looks-like">What it looks like</a> ·
   <a href="#sources">Sources</a> ·
+  <a href="#categorising">Categorising</a> ·
   <a href="#security-model">Security</a> ·
-  <a href="#known-gaps">Known gaps</a>
+  <a href="#credits">Credits</a>
 </p>
 
 <p align="center">
@@ -44,11 +45,13 @@ already have installed.
 - [Install](#install) — download, with your coding CLI, or by hand
 - [What it looks like](#what-it-looks-like)
 - [Sources](#sources) — X, Hacker News, YouTube, Instagram, links
+- [Categorising](#categorising) — regex, Claude, Codex, or Laya trained on your labels
 - [How it fits together](#how-it-fits-together)
 - [Security model](#security-model)
 - [Develop](#develop)
 - [Known gaps](#known-gaps)
 - [Roadmap](#roadmap)
+- [Credits](#credits)
 
 ---
 
@@ -128,17 +131,14 @@ Then launch it normally. (Right-click → Open also works on macOS 14 and earlie
 | macOS | 11.0+ | |
 | Node.js | 20+ | **must be installed separately** — see [Known gaps](#known-gaps) |
 | Rust | 1.77+ | build only |
-| Python | 3.9+ | classify / export scripts |
+| Python | 3.9+ | classify / export scripts (Laya needs 3.10+ — setup fetches one if missing) |
 
 Optional, for the AI features: [Claude Code](https://claude.ai/code) or
 [Codex CLI](https://github.com/openai/codex). For syncing X bookmarks:
 [Field Theory](https://github.com/afar1/fieldtheory-cli).
 
-Optional, for fast offline categorising: [Laya](https://github.com/NandhaKishorM/laya).
-Settings → AI → **Install & train** (or `python/setup_laya.sh`) runs `pip install laya`
-into `~/.tsb/laya-venv` and trains it on the categories your bookmarks already have.
-It labels a bookmark in about 0.1 s against roughly 1 s for Codex, with the same
-agreement on held-out bookmarks. The first install downloads about 2.5 GB.
+Optional, for fast offline categorising: [Laya](https://github.com/NandhaKishorM/laya) —
+see [Categorising](#categorising).
 
 ### First run
 
@@ -155,7 +155,9 @@ screen works before you connect anything real.
 The feed at the top is every source at once. The sidebar lists all of them from the
 first launch — greyed until you have put something in one, so you can see what the app
 holds before you own any of it. Favourite folders span sources: an article, a tweet and
-a video can share one.
+a video can share one. **Pin** the folders you reach for most and they sit above the
+rest, in the order you pinned them; past five folders the list scrolls and gets a search
+box. Filing a bookmark is one field that finds a folder or creates it.
 
 ### Each source is a place, not just a filter
 
@@ -168,9 +170,10 @@ aren't re-offered every morning.
 
 ### Your playlists and collections, in the same window
 
-YouTube shows what you have imported and the two ways to import more; Instagram links
-straight to the page that starts its export. Both importers are two-phase — read the
-file, show what is inside, import only what you tick.
+YouTube shows your playlists, a **Refresh** for each one it knows the link to, and the two
+ways to import more; Instagram links straight to the page that starts its export. Both
+export importers are two-phase — read the file, show what is inside, import only what
+you tick.
 
 ![YouTube playlists and import](docs/screenshots/08-youtube.png)
 
@@ -185,7 +188,10 @@ Four steps, all skippable.
 ### Chat with your bookmarks
 
 Ask questions in plain English; the AI searches your collection and answers in context,
-on your local Claude Code or Codex CLI.
+on your local Claude Code or Codex CLI, citing the bookmarks it used. Chat lives in a
+launcher at the bottom right: it opens a small window beside the feed (⌘K), and full
+screen is one click from its title bar. The ✦ button on any card asks about that card
+there, so the feed you were reading stays put.
 
 ![Chat with bookmarks](docs/screenshots/04-chat.png)
 
@@ -207,6 +213,28 @@ ElevenLabs / Sarvam if you want better voices.
 Adding and browsing live in the same menu as the AI tools.
 
 ![Tools menu](docs/screenshots/03-tools.png)
+
+### Settings
+
+The YouTube API key lives here — shown, checkable against YouTube, and never on the
+source screen. Google keys carry no expiry date, so there is a **Check** rather than a
+countdown.
+
+![Settings → YouTube](docs/screenshots/10-settings-youtube.png)
+
+**AI** picks the agent for chat and the podcast, and the engine that categorises — with
+Laya's install, training state and a Retrain button.
+
+![Settings → AI, with Laya](docs/screenshots/11-laya.png)
+
+**Profile** sets the picture on your Profile button: TJ by default, the rest of the Recess
+gang, or an upload of your own, cropped square and kept in `~/.tsb`.
+
+![Settings → Profile](docs/screenshots/12-profile.png)
+
+**About** says where your data lives, and thanks the projects this is built on.
+
+![Settings → About](docs/screenshots/13-about.png)
 
 ### A reading face
 
@@ -250,9 +278,15 @@ within a week.
 ### YouTube, in order of setup
 
 1. **Paste a video** — no credentials. Title, channel and thumbnail come from oEmbed.
-2. **A public playlist** — one API key, pasted once into the YouTube tab. Reads any
-   public playlist, yours or anyone's.
+2. **A public playlist** — one API key, pasted once into **Settings → YouTube**. Reads
+   any public or unlisted playlist, yours or anyone's.
 3. **Google Takeout** — playlists, Liked, and **Watch Later**.
+
+**Playlists stay in sync.** Every playlist you import is remembered, with a **Refresh**
+beside it and a **Refresh all** — new videos come in, the ones you have stay as they are.
+A Takeout export includes `playlists.csv`, which names each playlist's id, so those
+refresh too. A playlist whose export had no id says so, and pasting its link once
+links it.
 
 There is no sign-in flow, on purpose. `youtube.readonly` is a sensitive scope: an
 unverified app is capped at 100 hand-added test users, and going past that needs a
@@ -317,6 +351,44 @@ re-derive a folder; nothing can touch a favourite.
 
 ---
 
+## Categorising
+
+Every bookmark gets one category, and the sidebar's **Categories** list is built from
+them. Four engines, picked in **Settings → AI** or the Sync panel:
+
+| Engine | How | Agreement\* | Per bookmark |
+|---|---|---|---|
+| **Python** | keyword rules, offline | 24% | instant |
+| **Claude** / **Codex** | your local CLI, 20 bookmarks per call | 42% (Codex) | ~1 s |
+| **Laya** | local model trained on your own labels | ~40% | ~0.1 s |
+
+<sub>\* Agreement with the categories an LLM had already given, on 300 bookmarks held out
+of training. Those labels are themselves noisy — Codex scoring 42% against them says as
+much — so read the column as "matches what you had", not accuracy.</sub>
+
+**Laya** ([`pip install laya`](https://pypi.org/project/laya/)) is Nandakishor M's
+non-generative decision model: an encoder and a scoring head, one forward pass, nothing
+to parse. Asked cold to choose among 34 categories it did *worse* than the keyword
+rules (19%) — its README warns that many options share a small token budget. What does
+work is its encoder: every bookmark that already has a category is a training example.
+`python/laya_classify.py` embeds them once, fits a linear layer from embedding to
+category, and labels new bookmarks with the pair — Codex-level agreement, ten times
+faster, offline, without spending a subscription on labelling.
+
+- **Setup**: Settings → AI → **Install & train**, or `python/setup_laya.sh`. It runs
+  `pip install laya` into `~/.tsb/laya-venv` (fetching a standalone Python 3.12 with
+  `uv` if macOS's 3.9 is all there is — no Homebrew, no sudo), downloads the checkpoint
+  (about 2.5 GB in all the first time), and trains. About five minutes on an M-series Mac.
+- **The dataset** is written to `~/.tsb/laya/dataset.jsonl` — `{id, text, category}` per
+  line — so you can see exactly what it learned from. Labels Laya produced are kept out
+  of it, so it never learns from its own guesses.
+- **It keeps learning.** Once 50 more labelled bookmarks have piled up, the next run
+  retrains first; only the new ones need embedding.
+- **If it isn't set up**, choosing it falls back to the keyword rules rather than failing
+  the sync.
+
+---
+
 ## How it fits together
 
 ```
@@ -341,6 +413,8 @@ re-derive a folder; nothing can touch a favourite.
               ├── bookmarks.json X, owned by Field Theory
               ├── sources/       hn · yt · ig · link, owned by this app
               ├── imports/       exports you uploaded, kept for re-import
+              ├── laya/          dataset · embeddings · trained head
+              ├── laya-venv/     Laya's Python, if you installed it
               ├── settings.json
               └── server.log
 ```
@@ -476,13 +550,16 @@ These are real and worth fixing before this goes to anyone else's machine:
   but it should be consistent.
 - **`better-sqlite3` is a native module** compiled for this machine's architecture. A
   universal build needs it rebuilt for both, or the server ported to Rust.
-- **Tests cover the ingest layer only.** `npm test` runs 80 cases: id namespacing, the
+- **Tests cover the ingest layer only.** `npm test` runs 81 cases: id namespacing, the
   merge rules and the four parsers, plus the Markdown renderer and the sorts — the parts
   with real logic, and where both bugs found while building this actually lived. The
   sidecar logic and the routes have none.
 - **Instagram and Watch Later are manual by nature.** Neither has an API, so both are
   export-driven and go stale between imports. That is a platform constraint, not
   something a later version fixes.
+- **Laya is heavy for what it does.** Torch and the checkpoint are about 2.5 GB for a
+  classifier whose agreement is capped by the labels it learns from. A smaller encoder
+  would likely do as well; it has not been measured.
 - **Takeout titles are best-effort.** A Takeout CSV is video ids and nothing else, so
   titles are filled in afterwards from oEmbed, bounded at 150 lookups per import. A
   larger Watch Later imports fully but leaves later rows untitled until a re-import.
@@ -518,10 +595,29 @@ MIT © Mayank Sagar
 
 ## Credits
 
-Built on [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks),
-powered by [Field Theory](https://github.com/afar1/fieldtheory-cli) by
-[Andrew Farah](https://x.com/andrewfarah).
+This app stands on other people's work. Thank you.
 
-<sub>Screenshots show the bundled sample collection plus a handful of public Hacker
-News, YouTube and web links — not real bookmark data. The Instagram entries are
-fixtures in the export's shape.</sub>
+- **[Andrew Farah](https://x.com/andrewfarah)** — [Field Theory](https://github.com/afar1/fieldtheory-cli),
+  the CLI that syncs X bookmarks to your Mac. Every X bookmark here arrives through it,
+  and its classifier wrote the labels Laya learns from.
+- **Nandakishor M · Convai Innovations** — [Laya](https://github.com/NandhaKishorM/laya)
+  ([Hugging Face](https://huggingface.co/convaiinnovations/laya)), the local decision
+  model behind the Laya categoriser.
+- **Answer.AI & LightOn** — [ModernBERT](https://huggingface.co/answerdotai/ModernBERT-large),
+  the encoder inside Laya.
+- **Anthropic & OpenAI** — [Claude Code](https://claude.ai/code) and
+  [Codex CLI](https://github.com/openai/codex), which run chat, the podcast and AI
+  categorising on the subscription you already have.
+- **Google** — the [YouTube Data API](https://developers.google.com/youtube/v3) and
+  Takeout. **Algolia** — the [Hacker News search API](https://hn.algolia.com/api).
+- **[Tauri](https://tauri.app)**, **React**, **Vite**, **Express** and
+  **better-sqlite3** — the app itself. **[`block/buzz`](https://github.com/block/buzz)**
+  for the agent-runtime ideas on the roadmap.
+
+Built on [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks),
+the browser build of the same app.
+
+<sub>Screenshots show the bundled sample collection plus public Hacker News stories,
+3Blue1Brown's public playlists and a few web links — not real bookmark data. The
+Instagram entries are fixtures in the export's shape, and the API key shown is a
+placeholder.</sub>

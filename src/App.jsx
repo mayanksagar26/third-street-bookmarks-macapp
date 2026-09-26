@@ -103,7 +103,8 @@ export default function App() {
   // The native menu's Settings item (Cmd+,) reaches React through an event,
   // since the menu lives in Rust and has no other handle on this tree.
   useEffect(() => {
-    const open = () => setSettingsOpen(true);
+    // `detail` optionally names the section to open on (e.g. 'youtube').
+    const open = e => setSettingsOpen(typeof e?.detail === 'string' ? e.detail : true);
     window.addEventListener('tsb:open-settings', open);
     return () => window.removeEventListener('tsb:open-settings', open);
   }, []);

@@ -9,9 +9,14 @@ By default it looks at every unclassified row. Pass --ids-file to restrict it
 to a specific set of ids (one per line) — what a sync just brought in, rather
 than the whole backlog.
 
+--backend=laya hands the whole run to laya_classify.py under the Laya
+virtualenv (~/.tsb/laya-venv, made by setup_laya.sh): a local model trained on
+the labels you already have. Falls back to the regex rules if it isn't set up.
+
 Usage:
     python3 classify.py
     python3 classify.py --ids-file=/tmp/new-ids.txt
+    python3 classify.py --backend=laya
     OPENAI_API_KEY=sk-... python3 classify.py
 """
 
@@ -25,7 +30,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-DB_PATH = Path.home() / ".ft-bookmarks/bookmarks.db"
+# FT_DB points a run at another copy of the database (tests, dry runs).
+DB_PATH = Path(os.environ.get("FT_DB", Path.home() / ".ft-bookmarks/bookmarks.db"))
 
 # ── Categories & keyword rules ─────────────────────────────────────────────────
 
@@ -224,6 +230,25 @@ def classify_json_file(path: Path, backend: str, only_ids: set | None = None):
     print(f"  Done. {len(todo)} {scope}bookmarks classified.")
 
 
+# ── Laya hand-off ──────────────────────────────────────────────────────────────
+
+LAYA_PYTHON = Path(os.environ.get("TSB_LAYA_PYTHON", Path.home() / ".tsb/laya-venv/bin/python"))
+
+
+def run_laya(argv: list[str]) -> bool:
+    """Run laya_classify.py under its own interpreter. False means "not set up
+    or it failed" — the caller carries on with the regex rules."""
+    script = Path(__file__).resolve().parent / "laya_classify.py"
+    if not LAYA_PYTHON.exists():
+        print("  Laya isn't installed (run python/setup_laya.sh) — using regex instead.", flush=True)
+        return False
+    args = [a for a in argv if not a.startswith("--backend=")]
+    code = subprocess.call([str(LAYA_PYTHON), str(script), "classify", *args])
+    if code != 0:
+        print("  Laya failed — using regex for whatever is left.", flush=True)
+    return code == 0
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
@@ -238,6 +263,11 @@ def main():
             json_path = Path(arg.split('=', 1)[1])
         elif arg.startswith('--ids-file='):
             only_ids = read_ids_file(Path(arg.split('=', 1)[1]))
+
+    if backend == 'laya':
+        if run_laya(sys.argv[1:]):
+            return
+        backend = 'regex'
 
     if backend == 'regex':
         if os.environ.get("OPENAI_API_KEY"):

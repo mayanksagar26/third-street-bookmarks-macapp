@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { FONTS, DEFAULT_FONT, applyFont } from '../fonts';
 import AgentPicker, { useRuntimes } from './AgentPicker';
 import BookmarkFinder from './BookmarkFinder';
+import { openExternal } from '../external-links';
 import {
   AVATARS,
   CUSTOM_AVATAR,
@@ -22,6 +23,7 @@ const SECTIONS = [
   { id: 'profile', label: 'Profile' },
   { id: 'ai', label: 'AI' },
   { id: 'bookmarks', label: 'Bookmarks' },
+  { id: 'youtube', label: 'YouTube' },
   { id: 'window', label: 'Window' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'about', label: 'About' },
@@ -195,6 +197,174 @@ function AvatarPicker({ value, hasUpload, onPick }) {
   );
 }
 
+/**
+ * The YouTube Data API key: the one place it is shown.
+ *
+ * Google API keys carry no expiry date. One stops working only when it is
+ * deleted, restricted, or the API is switched off on its project — none of
+ * which a timer could predict — so this checks it against YouTube instead.
+ */
+function YouTubeKey({ value, onSave }) {
+  const [draft, setDraft] = useState(value || '');
+  const [check, setCheck] = useState(null); // null | 'busy' | { ok, error }
+
+  useEffect(() => { setDraft(value || ''); }, [value]);
+
+  const dirty = draft.trim() !== (value || '');
+
+  async function runCheck(apiKey) {
+    setCheck('busy');
+    try {
+      const r = await fetch('/api/youtube/check-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(apiKey ? { apiKey } : {}),
+      });
+      setCheck(await r.json());
+    } catch (e) { setCheck({ ok: false, error: e.message }); }
+  }
+
+  async function save() {
+    await onSave(draft.trim());
+    if (draft.trim()) runCheck(draft.trim());
+    else setCheck(null);
+  }
+
+  return (
+    <div className="set-field">
+      <div className="set-field-label">API key</div>
+      <div className="add-row">
+        <input
+          className="add-input"
+          placeholder="Paste a YouTube Data API key"
+          value={draft}
+          spellCheck={false}
+          autoComplete="off"
+          onChange={e => { setDraft(e.target.value); setCheck(null); }}
+          onKeyDown={e => { if (e.key === 'Enter' && dirty) save(); }}
+        />
+        {dirty ? (
+          <button type="button" className="add-btn primary" onClick={save}>Save</button>
+        ) : (
+          <button type="button" className="add-btn" onClick={() => runCheck()} disabled={!value || check === 'busy'}>
+            {check === 'busy' ? 'Checking…' : 'Check'}
+          </button>
+        )}
+      </div>
+      {check && check !== 'busy' && (
+        <div className={`add-msg ${check.ok ? 'ok' : 'error'}`}>
+          {check.ok ? 'Works — YouTube accepted this key.' : `Not working: ${check.error}`}
+        </div>
+      )}
+      <p className="set-lead" style={{ fontSize: 12 }}>
+        Reads any public or unlisted playlist. Keys don’t expire, so there is
+        nothing to renew — if one is ever deleted or restricted in Google Cloud,
+        Check will say so and a new one pasted here replaces it.
+        {' '}
+        <button
+          type="button"
+          className="add-link"
+          onClick={() => openExternal('https://console.cloud.google.com/apis/library/youtube.googleapis.com')}
+        >Get a key →</button>
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Laya's install and training state, with the one button that does both.
+ *
+ * Setup is `pip install laya` into ~/.tsb/laya-venv and a first training run
+ * on every bookmark that already has a category — a few minutes and a couple
+ * of GB the first time, so it waits for a click.
+ */
+function LayaSetup() {
+  const [st, setSt] = useState(null);
+
+  const load = useCallback(() => {
+    fetch('/api/laya/status').then(r => r.json()).then(setSt).catch(() => {});
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  // Poll only while an install or training run is going.
+  useEffect(() => {
+    if (!st?.running) return undefined;
+    const t = setInterval(load, 2000);
+    return () => clearInterval(t);
+  }, [st?.running, load]);
+
+  async function run() {
+    await fetch('/api/laya/setup', { method: 'POST' }).catch(() => {});
+    setSt(s => ({ ...s, running: true }));
+    load();
+  }
+
+  if (!st) return null;
+  const summary = st.running
+    ? 'Working…'
+    : st.trained
+      ? `Trained on ${st.trainedOn.toLocaleString()} of your bookmarks · ${Math.round(st.accuracy * 100)}% agreement on ones it hadn’t seen`
+      : st.installed ? 'Installed, not trained yet' : 'Not installed';
+
+  return (
+    <div className="set-field">
+      <div className="set-field-label">Laya</div>
+      <div className="set-path">{summary}</div>
+      {st.running && st.log?.length > 0 && (
+        <div className="set-path" style={{ opacity: 0.7 }}>{st.log[st.log.length - 1]}</div>
+      )}
+      {!st.running && st.setup === 'error' && (
+        <div className="add-msg error">{st.log?.[st.log.length - 1] || 'Setup failed'}</div>
+      )}
+      <div>
+        <button type="button" className="bf-secondary" onClick={run} disabled={st.running}>
+          {st.running ? 'Working…' : st.trained ? 'Retrain now' : st.installed ? 'Train' : 'Install & train'}
+        </button>
+      </div>
+      <p className="set-lead" style={{ fontSize: 12 }}>
+        A local model that learns from the categories your bookmarks already
+        have, then labels new ones in about a tenth of a second each — no CLI,
+        no subscription. It retrains itself once 50 more labels have piled up.
+        First install downloads about 2.5 GB.
+      </p>
+    </div>
+  );
+}
+
+// The people and projects this app stands on. Links go to each one's own page.
+const CREDITS = [
+  {
+    who: 'Andrew Farah',
+    what: 'Field Theory',
+    why: 'the CLI that syncs your X bookmarks — and whose classifier wrote the labels Laya learns from',
+    links: [['@andrewfarah', 'https://x.com/andrewfarah'], ['fieldtheory-cli', 'https://github.com/afar1/fieldtheory-cli']],
+  },
+  {
+    who: 'Nandakishor M · Convai Innovations',
+    what: 'Laya',
+    why: 'the local decision model behind the Laya categoriser — fast, offline, and trainable on your own labels',
+    links: [['GitHub', 'https://github.com/NandhaKishorM/laya'], ['Hugging Face', 'https://huggingface.co/convaiinnovations/laya']],
+  },
+  {
+    who: 'Answer.AI & LightOn',
+    what: 'ModernBERT',
+    why: 'the encoder inside Laya',
+    links: [['Hugging Face', 'https://huggingface.co/answerdotai/ModernBERT-large']],
+  },
+  {
+    who: 'Anthropic & OpenAI',
+    what: 'Claude Code and Codex',
+    why: 'chat, the podcast, and AI categorising, on the subscription you already have',
+    links: [],
+  },
+  {
+    who: 'Google & Algolia',
+    what: 'YouTube Data API and the Hacker News search API',
+    why: 'playlists, and the front page',
+    links: [],
+  },
+];
+
 export default function Settings({ onClose, initialSection }) {
   const [section, setSection] = useState(
     SECTIONS.some(s => s.id === initialSection) ? initialSection : 'profile',
@@ -272,6 +442,8 @@ export default function Settings({ onClose, initialSection }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(changes),
     }).catch(() => {});
+    // Panels outside this dialog (the YouTube source) read settings too.
+    window.dispatchEvent(new CustomEvent('tsb:settings-changed', { detail: changes }));
   }, []);
 
   const backend = settings?.aiBackend || active || 'claude';
@@ -358,6 +530,7 @@ export default function Settings({ onClose, initialSection }) {
                     { id: 'python', label: 'Python', hint: 'Offline regex — fast, free' },
                     { id: 'claude', label: 'Claude', hint: 'Better labels, slower' },
                     { id: 'codex', label: 'Codex', hint: 'Better labels, slower' },
+                    { id: 'laya', label: 'Laya', hint: 'Learns your labels — fast, offline' },
                   ].map(opt => (
                     <button
                       key={opt.id}
@@ -372,6 +545,8 @@ export default function Settings({ onClose, initialSection }) {
                   ))}
                 </div>
               </div>
+
+              <LayaSetup />
             </>
           )}
 
@@ -394,6 +569,19 @@ export default function Settings({ onClose, initialSection }) {
                 runtime={backend}
                 agentLabel={agentLabel}
                 onAdopted={data => setSettings(s => ({ ...s, bookmarksPath: data.path }))}
+              />
+            </>
+          )}
+
+          {section === 'youtube' && (
+            <>
+              <p className="set-lead">
+                Used to import and refresh YouTube playlists. It is kept in
+                ~/.tsb/settings.json on this Mac and sent only to YouTube.
+              </p>
+              <YouTubeKey
+                value={settings?.youtubeApiKey}
+                onSave={key => patch({ youtubeApiKey: key })}
               />
             </>
           )}
@@ -476,6 +664,24 @@ export default function Settings({ onClose, initialSection }) {
                 <div className="set-field-label">Where your data lives</div>
                 <div className="set-path">~/.tsb/state.db — read, favourites, labels, notes</div>
                 <div className="set-path">{shortenPath(settings?.bookmarksPath) || '~/.tsb/bookmarks.json'} — the collection</div>
+              </div>
+
+              <div className="set-divider" />
+
+              <div className="set-field">
+                <div className="set-field-label">Thanks</div>
+                <ul className="set-credits">
+                  {CREDITS.map(c => (
+                    <li key={c.what}>
+                      <strong>{c.what}</strong> by {c.who} — {c.why}.
+                      {c.links.map(([label, url]) => (
+                        <button key={url} type="button" className="add-link" onClick={() => openExternal(url)}>
+                          {label} →
+                        </button>
+                      ))}
+                    </li>
+                  ))}
+                </ul>
               </div>
 
               <div className="set-divider" />

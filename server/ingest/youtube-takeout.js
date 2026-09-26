@@ -66,6 +66,35 @@ function parseCsv(file) {
   return records;
 }
 
+/**
+ * Takeout's `playlists.csv` — one row per playlist, with its id and title.
+ *
+ * It is the index, not a playlist, so it is read for names → ids (what lets a
+ * Takeout-imported playlist be refreshed over the API later) and never parsed
+ * for videos: a title that happens to be 11 letters, like "Informative", would
+ * otherwise pass for a video id.
+ */
+function isPlaylistIndex(file) {
+  return /^playlists?\.csv$/i.test(path.basename(file));
+}
+
+function readPlaylistIndex(file) {
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch { return {}; }
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return {};
+  const header = splitRow(lines[0]).map(h => h.toLowerCase());
+  const idCol = header.findIndex(h => h === 'playlist id');
+  const titleCol = header.findIndex(h => h.startsWith('playlist title'));
+  if (idCol < 0 || titleCol < 0) return {};
+  const out = {};
+  for (const line of lines.slice(1)) {
+    const cells = splitRow(line);
+    if (cells[idCol] && cells[titleCol]) out[cells[titleCol]] = cells[idCol];
+  }
+  return out;
+}
+
 /** Find playlist CSVs under an unzipped Takeout folder (or accept one CSV directly). */
 function findPlaylistCsvs(root, { maxDepth = 6, limit = 200 } = {}) {
   const out = [];
@@ -92,7 +121,9 @@ function findPlaylistCsvs(root, { maxDepth = 6, limit = 200 } = {}) {
  */
 function readTakeout(target, { only = null } = {}) {
   const stat = fs.statSync(target);
-  const files = stat.isDirectory() ? findPlaylistCsvs(target) : [target];
+  const all = stat.isDirectory() ? findPlaylistCsvs(target) : [target];
+  const playlistIds = Object.assign({}, ...all.filter(isPlaylistIndex).map(readPlaylistIndex));
+  const files = all.filter(f => !isPlaylistIndex(f));
   if (!files.length) throw new Error('No playlist .csv files found in there');
 
   const byPlaylist = {};
@@ -116,7 +147,7 @@ function readTakeout(target, { only = null } = {}) {
     }
   }
 
-  return { files: files.map(f => path.basename(f)), playlists, records: [...merged.values()] };
+  return { files: files.map(f => path.basename(f)), playlists, playlistIds, records: [...merged.values()] };
 }
 
-module.exports = { readTakeout, parseCsv, findPlaylistCsvs, playlistNameFromFile };
+module.exports = { readTakeout, parseCsv, findPlaylistCsvs, playlistNameFromFile, readPlaylistIndex };

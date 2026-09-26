@@ -54,7 +54,7 @@ const DATA_DIR = process.env.TSB_DATA_DIR
   : REPO_ROOT;
 const SCRIPT_DIR = process.env.TSB_SCRIPT_DIR
   ? path.resolve(process.env.TSB_SCRIPT_DIR)
-  : REPO_ROOT;
+  : path.join(REPO_ROOT, 'python');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -78,6 +78,9 @@ function bookmarksPath() {
 const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
 const FT = path.join(os.homedir(), '.npm-global/bin/ft');
 const CLASSIFY_PY = path.join(SCRIPT_DIR, 'classify.py');
+const LAYA_PY = path.join(SCRIPT_DIR, 'laya_classify.py');
+const LAYA_SETUP = path.join(SCRIPT_DIR, 'setup_laya.sh');
+const LAYA_PYTHON = path.join(os.homedir(), '.tsb/laya-venv/bin/python');
 
 // ── Sync source registry ──────────────────────────────────────────────────────
 // Must mirror client/src/sources.js. `bin` candidates are probed so the UI can
@@ -456,9 +459,9 @@ if (fs.existsSync(DIST)) {
 }
 
 // ── Process tracking ──────────────────────────────────────────────────────────
-const procs  = { sync: null, classify: null };
-const logs   = { sync: [], classify: [] };
-const status = { sync: 'idle', classify: 'idle' };
+const procs  = { sync: null, classify: null, laya: null };
+const logs   = { sync: [], classify: [], laya: [] };
+const status = { sync: 'idle', classify: 'idle', laya: 'idle' };
 
 function runProc(key, cmd, args, onDone) {
   if (procs[key]) return false;
@@ -782,20 +785,95 @@ app.post('/api/save-url', async (req, res) => {
 });
 
 // ── YouTube playlist (public, API key only — no OAuth consent screen) ─────────
+//
+// Every playlist that comes in is remembered in settings as
+// `youtubePlaylists: [{ id, title, lastSyncedAt, added }]`, which is what makes
+// Refresh possible: without it the app knows a video sits in a folder called
+// "Informative" but has no idea which playlist that was, so re-checking it
+// meant finding and pasting the link again.
+function ytErrorHint(message) {
+  return /HTTP 403/.test(message)
+    ? ' — check the key has the YouTube Data API enabled'
+    : /HTTP 404/.test(message) ? ' — that playlist is private or does not exist' : '';
+}
+
+function rememberPlaylists(entries) {
+  const settings = readSettings();
+  const byId = new Map((settings.youtubePlaylists || []).map(p => [p.id, p]));
+  for (const e of entries) byId.set(e.id, { ...byId.get(e.id), ...e });
+  settings.youtubePlaylists = [...byId.values()];
+  writeSettings(settings);
+  return settings.youtubePlaylists;
+}
+
+async function syncPlaylist(list, apiKey) {
+  const { title, records } = await yt.importPlaylist({ url: yt.playlistUrl(list), apiKey });
+  if (!records.length) throw new Error('That playlist is empty or not public');
+  const result = ingest('yt', records);
+  rememberPlaylists([{ id: list, title, lastSyncedAt: new Date().toISOString(), added: result.added }]);
+  return { ...result, playlist: title };
+}
+
 app.post('/api/youtube/playlist', async (req, res) => {
   const url = String(req.body?.url || '').trim();
   const apiKey = String(req.body?.apiKey || readSettings().youtubeApiKey || '').trim();
   if (!url) return res.status(400).json({ error: 'Paste a playlist URL' });
   if (!apiKey) return res.status(400).json({ error: 'Add a YouTube API key in Settings first' });
+  const list = yt.playlistId(url);
+  if (!list) return res.status(400).json({ error: 'could not find a playlist id in that URL' });
   try {
-    const { title, records } = await yt.importPlaylist({ url, apiKey });
-    if (!records.length) return res.status(404).json({ error: 'That playlist is empty or not public' });
-    res.json({ ...ingest('yt', records), playlist: title });
+    res.json(await syncPlaylist(list, apiKey));
   } catch (e) {
-    const hint = /HTTP 403/.test(e.message)
-      ? ' — check the key has the YouTube Data API enabled'
-      : /HTTP 404/.test(e.message) ? ' — that playlist is private or does not exist' : '';
-    res.status(502).json({ error: `${e.message}${hint}` });
+    res.status(502).json({ error: `${e.message}${ytErrorHint(e.message)}` });
+  }
+});
+
+// What the YouTube panel needs, and deliberately not the key itself — the
+// panel only has to know whether one is saved. The key is shown in Settings.
+app.get('/api/youtube/status', (req, res) => {
+  const s = readSettings();
+  res.json({ hasKey: !!String(s.youtubeApiKey || '').trim(), playlists: s.youtubePlaylists || [] });
+});
+
+/**
+ * Re-read remembered playlists (all of them, or one by `id`) and add whatever
+ * is new. Sequential, not parallel: a handful of playlists is a few seconds
+ * either way, and one failing (made private since) must not hide the others.
+ */
+app.post('/api/youtube/refresh', async (req, res) => {
+  const s = readSettings();
+  const apiKey = String(s.youtubeApiKey || '').trim();
+  if (!apiKey) return res.status(400).json({ error: 'Add a YouTube API key in Settings first' });
+  const wanted = req.body?.id
+    ? (s.youtubePlaylists || []).filter(p => p.id === req.body.id)
+    : (s.youtubePlaylists || []);
+  if (!wanted.length) return res.status(404).json({ error: 'No saved playlists to refresh' });
+
+  const results = [];
+  for (const p of wanted) {
+    try {
+      const r = await syncPlaylist(p.id, apiKey);
+      results.push({ id: p.id, playlist: r.playlist, added: r.added });
+    } catch (e) {
+      results.push({ id: p.id, playlist: p.title, error: `${e.message}${ytErrorHint(e.message)}` });
+    }
+  }
+  res.json({ results, added: results.reduce((n, r) => n + (r.added || 0), 0) });
+});
+
+/**
+ * Is this key still good? Google API keys have no expiry date — they stop
+ * working only when deleted, restricted, or the API is disabled on the project
+ * — so a live check is the honest answer, not a countdown. Costs 1 quota unit.
+ */
+app.post('/api/youtube/check-key', async (req, res) => {
+  const apiKey = String(req.body?.apiKey || readSettings().youtubeApiKey || '').trim();
+  if (!apiKey) return res.json({ ok: false, error: 'No key saved' });
+  try {
+    await yt.checkKey(apiKey);
+    res.json({ ok: true, checkedAt: new Date().toISOString() });
+  } catch (e) {
+    res.json({ ok: false, error: `${e.message}${ytErrorHint(e.message)}` });
   }
 });
 
@@ -984,11 +1062,15 @@ app.post('/api/import/youtube', async (req, res) => {
   }
   try {
     const only = Array.isArray(req.body?.only) ? req.body.only : null;
-    const { files, playlists, records } = ytTakeout.readTakeout(target, { only });
+    const { files, playlists, playlistIds, records } = ytTakeout.readTakeout(target, { only });
     if (!only) return res.json({ preview: true, files, collections: playlists });
     // A Takeout CSV is video ids and nothing else. Without this the import
     // succeeds and leaves you with a screen of identical untitled rows.
     await yt.enrichTitles(records);
+    // Takeout's playlists.csv names each playlist's id, so the ones imported
+    // here can be refreshed later over the API with no link to paste.
+    const known = (only.length ? only : Object.keys(playlists)).filter(name => playlistIds[name]).map(name => ({ id: playlistIds[name], title: name }));
+    if (known.length) rememberPlaylists(known);
     res.json({ ...ingest('yt', records), collections: playlists, files });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -1508,7 +1590,7 @@ function runExport(onDone) {
 // Classify a bookmarks.json in place (source-agnostic). Maps the UI's classify
 // backend onto classify.py's --backend flag. python → regex (offline/OpenAI key).
 function runJsonClassify(classifyBackend, onDone) {
-  const backend = classifyBackend === 'codex' ? 'codex' : classifyBackend === 'claude' ? 'claude' : 'regex';
+  const backend = ['codex', 'claude', 'laya'].includes(classifyBackend) ? classifyBackend : 'regex';
   const proc = spawn('python3', [CLASSIFY_PY, `--json=${bookmarksPath()}`, `--backend=${backend}`], {
     env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH },
   });
@@ -1517,6 +1599,33 @@ function runJsonClassify(classifyBackend, onDone) {
   proc.on('close', code => { if (onDone) onDone(code); });
   proc.on('error', e => { logs.classify.push(`Classify error: ${e.message}\n`); if (onDone) onDone(1); });
 }
+
+// ── Laya (local classifier trained on your own labels) ───────────────────────
+// Setup is `pip install laya` into ~/.tsb/laya-venv plus a first training run —
+// minutes, and a couple of GB — so it is a button the user presses, never
+// something a sync starts on its own.
+app.get('/api/laya/status', (req, res) => {
+  const base = { running: status.laya === 'running', setup: status.laya, log: logs.laya.join('').split('\n').filter(Boolean).slice(-4) };
+  if (!fs.existsSync(LAYA_PYTHON)) return res.json({ ...base, installed: false, trained: false });
+  const proc = spawn(LAYA_PYTHON, [LAYA_PY, 'status']);
+  let out = '';
+  proc.stdout.on('data', d => { out += d; });
+  proc.on('close', () => {
+    try { res.json({ ...base, ...JSON.parse(out) }); }
+    catch { res.json({ ...base, installed: true, trained: false }); }
+  });
+  proc.on('error', () => res.json({ ...base, installed: false, trained: false }));
+});
+
+app.post('/api/laya/setup', (req, res) => {
+  if (status.laya === 'running') return res.json({ ok: false, msg: 'Already running' });
+  // Installs if needed, then (re)trains — the same script covers both.
+  // Train from Field Theory's database when there is one, else the JSON.
+  const ftDb = path.join(os.homedir(), '.ft-bookmarks/bookmarks.db');
+  const args = fs.existsSync(ftDb) ? [LAYA_SETUP] : [LAYA_SETUP, `--json=${bookmarksPath()}`];
+  const started = runProc('laya', 'bash', args);
+  res.json({ ok: started });
+});
 
 app.post('/api/syncall', (req, res) => {
   if (status.sync === 'running' || status.classify === 'running') {
@@ -1560,10 +1669,13 @@ function runFieldTheorySync(settings) {
       return;
     }
 
-    if (classifyBackend === 'python') {
-      // 1. classify in SQLite via classify.py, 2. export to bookmarks.json
+    if (classifyBackend === 'python' || classifyBackend === 'laya') {
+      // 1. classify in SQLite via classify.py, 2. export to bookmarks.json.
+      // Laya takes the same route: classify.py hands off to laya_classify.py
+      // and falls back to the regex rules if Laya isn't set up.
       const idsFile = newIds ? writeIdsFile(newIds) : null;
       const args = idsFile ? [CLASSIFY_PY, `--ids-file=${idsFile}`] : [CLASSIFY_PY];
+      if (classifyBackend === 'laya') args.push('--backend=laya');
       runProc('classify', 'python3', args, () => {
         if (idsFile) { try { fs.unlinkSync(idsFile); } catch {} }
         runExport(() => { status.classify = 'done'; });

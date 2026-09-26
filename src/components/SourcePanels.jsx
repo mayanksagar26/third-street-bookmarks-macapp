@@ -262,42 +262,93 @@ export function PasteLink({ onAdded, autoFocus = false }) {
   );
 }
 
-/** Public playlist import, plus the Takeout route that reaches Watch Later. */
-export function YouTubeImport({ onAdded }) {
+/** "3 hours ago" — enough to tell whether a refresh is due. */
+function ago(iso) {
+  if (!iso) return 'never';
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} d ago`;
+}
+
+/** Settings listens for this; `detail` is the section to land on. */
+export function openSettings(section) {
+  window.dispatchEvent(new CustomEvent('tsb:open-settings', { detail: section }));
+}
+
+/**
+ * Public playlist import and refresh, plus the Takeout route that reaches
+ * Watch Later.
+ *
+ * The API key is not on this screen. It lives in Settings → YouTube, where it
+ * can be seen and checked; here there is only whether one is saved, and a
+ * button that takes you to it. `folders` is the source's playlists as the
+ * collection knows them, used to point out the ones that cannot refresh yet.
+ */
+export function YouTubeImport({ onAdded, folders = [] }) {
   const [playlistUrl, setPlUrl] = useState('');
-  const [apiKey, setApiKey]     = useState('');
-  const [busy, setBusy]         = useState(false);
+  const [status, setStatus]     = useState(null); // { hasKey, playlists }
+  const [busy, setBusy]         = useState(null); // 'import' | playlist id | 'all'
   const [result, setResult]     = useState(null);
 
+  function loadStatus() {
+    fetch('/api/youtube/status').then(r => r.json()).then(setStatus).catch(() => {});
+  }
+
   useEffect(() => {
-    fetch('/api/settings').then(r => r.json())
-      .then(s => { if (s.youtubeApiKey) setApiKey(s.youtubeApiKey); })
-      .catch(() => {});
+    loadStatus();
+    // A key added in Settings should light this panel up without a reload.
+    window.addEventListener('tsb:settings-changed', loadStatus);
+    return () => window.removeEventListener('tsb:settings-changed', loadStatus);
   }, []);
 
   async function importPlaylist() {
-    setBusy(true); setResult(null);
+    setBusy('import'); setResult(null);
     try {
-      if (apiKey.trim()) {
-        await fetch('/api/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ youtubeApiKey: apiKey.trim() }),
-        });
-      }
       const r = await fetch('/api/youtube/playlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: playlistUrl.trim(), apiKey: apiKey.trim() }),
+        body: JSON.stringify({ url: playlistUrl.trim() }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'import failed');
       setResult({ text: `“${d.playlist}” — ${d.added} new, ${d.skipped} already saved.` });
       setPlUrl('');
+      loadStatus();
       onAdded?.();
     } catch (e) { setResult({ error: e.message }); }
-    finally { setBusy(false); }
+    finally { setBusy(null); }
   }
+
+  async function refresh(id) {
+    setBusy(id || 'all'); setResult(null);
+    try {
+      const r = await fetch('/api/youtube/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(id ? { id } : {}),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'refresh failed');
+      const failed = d.results.filter(x => x.error);
+      const text = d.added
+        ? `${d.added} new video${d.added === 1 ? '' : 's'} added.`
+        : 'Up to date — nothing new.';
+      setResult(failed.length
+        ? { error: `${text} ${failed.map(f => `“${f.playlist}”: ${f.error}`).join(' · ')}` }
+        : { text });
+      loadStatus();
+      if (d.added) onAdded?.();
+    } catch (e) { setResult({ error: e.message }); }
+    finally { setBusy(null); }
+  }
+
+  const hasKey = !!status?.hasKey;
+  const saved = status?.playlists || [];
+  const linkedTitles = new Set(saved.map(p => p.title));
+  const unlinked = folders.map(([name]) => name).filter(n => !linkedTitles.has(n));
 
   return (
     <>
@@ -312,29 +363,54 @@ export function YouTubeImport({ onAdded }) {
             placeholder="https://www.youtube.com/playlist?list=…"
             value={playlistUrl}
             onChange={e => setPlUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && hasKey && playlistUrl.trim()) importPlaylist(); }}
           />
-          <button className="add-btn primary" onClick={importPlaylist} disabled={busy || !playlistUrl.trim()}>
-            {busy ? 'Importing…' : 'Import'}
+          <button
+            className="add-btn primary"
+            onClick={importPlaylist}
+            disabled={!!busy || !hasKey || !playlistUrl.trim()}
+          >
+            {busy === 'import' ? 'Importing…' : 'Import'}
           </button>
         </div>
-        <input
-          className="add-input"
-          placeholder="YouTube Data API key"
-          value={apiKey}
-          onChange={e => setApiKey(e.target.value)}
-          style={{ marginTop: 8 }}
-        />
-        <div className="add-hint">
-          An API key reads any <em>public</em> playlist and is saved for next time. There is no
-          sign-in step because the read-only YouTube scope needs a Google verification review
-          before anyone but you could use it — the export below avoids that entirely.
-          <button
-            className="add-link"
-            onClick={() => openExternal('https://console.cloud.google.com/apis/library/youtube.googleapis.com')}
-          >Get a key →</button>
+        <div className="yt-key-row">
+          <span className={`yt-key-dot ${hasKey ? 'on' : ''}`} aria-hidden="true" />
+          <span>{status == null ? 'Checking for an API key…' : hasKey ? 'API key saved' : 'No API key yet — playlists need one'}</span>
+          <button className="add-link" onClick={() => openSettings('youtube')}>
+            {hasKey ? 'Manage in Settings →' : 'Add it in Settings →'}
+          </button>
         </div>
         <Result result={result} />
       </div>
+
+      {(saved.length > 0 || unlinked.length > 0) && (
+        <div className="add-block">
+          <div className="yt-sync-head">
+            <label className="add-label" style={{ margin: 0 }}>Keep in sync</label>
+            {saved.length > 1 && (
+              <button className="add-btn" onClick={() => refresh()} disabled={!!busy || !hasKey}>
+                {busy === 'all' ? 'Refreshing…' : 'Refresh all'}
+              </button>
+            )}
+          </div>
+          {saved.map(p => (
+            <div key={p.id} className="yt-sync-row">
+              <span className="yt-sync-name">{p.title}</span>
+              <span className="yt-sync-when">{p.lastSyncedAt ? `checked ${ago(p.lastSyncedAt)}` : 'not checked yet'}</span>
+              <button className="add-btn" onClick={() => refresh(p.id)} disabled={!!busy || !hasKey}>
+                {busy === p.id ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
+          ))}
+          {unlinked.length > 0 && (
+            <div className="add-hint">
+              {unlinked.map(n => `“${n}”`).join(', ')} came in from a Takeout export, which
+              carried no playlist link. Paste {unlinked.length === 1 ? 'its' : 'each one’s'} link
+              above once and {unlinked.length === 1 ? 'it' : 'they'} will refresh from then on.
+            </div>
+          )}
+        </div>
+      )}
 
       <ExportImporter
         endpoint="/api/import/youtube"

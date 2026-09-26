@@ -79,7 +79,7 @@ export default function SourceView({
           activeFolder={activeFolder}
           onPick={onPickFolder}
         />
-        <YouTubeImport onAdded={onAdded} />
+        <YouTubeImport onAdded={onAdded} folders={folders} />
       </div>
     );
     if (sourceId === 'ig') return (

@@ -1,9 +1,6 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 
-/** Folder count past which the picker is worth a search box. */
-const FOLDER_SEARCH_FROM = 5;
-
 const POPUP_WIDTH = 240;
 const VIEWPORT_MARGIN = 8;
 const TRIGGER_GAP = 6;
@@ -24,7 +21,8 @@ export default function FavFolderPicker({
   buttonClassName = 'tw-btn star-btn',
 }) {
   const [open, setOpen] = useState(false);
-  const [newFolder, setNewFolder] = useState('');
+  // The folder just made here, so its row can arrive with a little emphasis.
+  const [justCreated, setJustCreated] = useState(null);
   const [renaming, setRenaming] = useState(null);
   const [renameText, setRenameText] = useState('');
   const [folderSearch, setFolderSearch] = useState('');
@@ -32,7 +30,6 @@ export default function FavFolderPicker({
 
   const wrapRef = useRef(null);
   const popupRef = useRef(null);
-  const newFolderRef = useRef(null);
   const searchRef = useRef(null);
 
   const isFav = folders.length > 0;
@@ -44,7 +41,14 @@ export default function FavFolderPicker({
     [allFolders, folders],
   );
 
-  const folderQuery = folderSearch.trim().toLowerCase();
+  const typedName = folderSearch.trim();
+  const folderQuery = typedName.toLowerCase();
+  // Matched without regard to case, so typing "toread" finds "ToRead" rather
+  // than offering to create a near-duplicate of it.
+  const exactMatch = folderQuery
+    ? pickerFolders.find(f => f.toLowerCase() === folderQuery)
+    : null;
+  const canCreate = Boolean(typedName) && !exactMatch;
   // Ticked folders lead, so a bookmark's own folders are the first thing you
   // see (and can untick) without scrolling for them.
   const visibleFolders = useMemo(() => {
@@ -79,11 +83,11 @@ export default function FavFolderPicker({
       // Next open starts clean rather than mid-search from last time.
       setFolderSearch('');
       setRenaming(null);
+      setJustCreated(null);
       return;
     }
-    // Search wins the caret when it exists: with a long list, typing is far
-    // more likely to mean "find a folder" than "name a new one".
-    const t = setTimeout(() => (searchRef.current || newFolderRef.current)?.focus(), 50);
+    // One field finds and creates, so it always takes the caret.
+    const t = setTimeout(() => searchRef.current?.focus(), 50);
     const close = (e) => {
       if (popupRef.current?.contains(e.target) || wrapRef.current?.contains(e.target)) return;
       setOpen(false);
@@ -122,18 +126,33 @@ export default function FavFolderPicker({
     if (!overflowsBottom) return;
     const above = r.top - TRIGGER_GAP - h;
     setPos(p => ({ ...p, top: Math.max(VIEWPORT_MARGIN, above) }));
-  }, [open, pos.top, visibleFolders.length]);
+  }, [open, pos.top, visibleFolders.length, canCreate]);
 
   function toggleFolder(folder) {
     const next = folders.includes(folder) ? folders.filter(f => f !== folder) : [...folders, folder];
     onSetFolders(next);   // keeps the popup open for multi-select
   }
 
-  function addNewFolder() {
-    const name = newFolder.trim();
-    if (!name) return;
-    if (!folders.includes(name)) onSetFolders([...folders, name]);
-    setNewFolder('');
+  /** A name with no folder behind it yet: make it, and file this bookmark in it. */
+  function createFromSearch() {
+    if (!canCreate) return;
+    onSetFolders([...folders, typedName]);
+    setJustCreated(typedName);
+    setFolderSearch('');
+  }
+
+  /**
+   * Enter in the field. An exact match is ticked rather than duplicated;
+   * anything else becomes a new folder.
+   */
+  function commitSearch() {
+    if (exactMatch) {
+      if (!folders.includes(exactMatch)) onSetFolders([...folders, exactMatch]);
+      setJustCreated(exactMatch);
+      setFolderSearch('');
+    } else {
+      createFromSearch();
+    }
   }
 
   function commitRename() {
@@ -172,23 +191,51 @@ export default function FavFolderPicker({
         >
           <div className="fav-popup-title">Save in folders</div>
 
-          {pickerFolders.length > FOLDER_SEARCH_FROM && (
+          <div className="fav-popup-search-wrap">
+            <svg className="fav-popup-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>
+            </svg>
             <input
               ref={searchRef}
               className="fav-popup-search"
-              placeholder={`Search ${pickerFolders.length} folders…`}
+              placeholder={pickerFolders.length ? 'Find or create a folder…' : 'Name a folder…'}
+              aria-label="Find or create a folder"
               value={folderSearch}
               onChange={e => setFolderSearch(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Escape') setFolderSearch(''); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); commitSearch(); }
+                else if (e.key === 'Escape') {
+                  // First Escape clears what you typed, the second closes. Kept
+                  // from the app's own Escape, which would close the chat too.
+                  e.stopPropagation();
+                  if (folderSearch) setFolderSearch('');
+                  else setOpen(false);
+                }
+              }}
             />
-          )}
+          </div>
 
           <div className="fav-popup-list">
-            {visibleFolders.length === 0 && (
-              <div className="fav-popup-empty">No folders match</div>
+            {canCreate && (
+              <button
+                type="button"
+                className="fav-popup-create"
+                onClick={createFromSearch}
+              >
+                <span className="fav-popup-create-plus" aria-hidden="true">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                </span>
+                <span className="fav-folder-name">
+                  Create folder <strong>“{typedName}”</strong>
+                </span>
+                <kbd className="fav-popup-kbd" aria-hidden="true">↵</kbd>
+              </button>
+            )}
+            {visibleFolders.length === 0 && !canCreate && (
+              <div className="fav-popup-empty">No folders yet — type a name to make one</div>
             )}
             {visibleFolders.map(f => (
-              <div key={f} className="fav-popup-folder">
+              <div key={f} className={`fav-popup-folder${justCreated === f ? ' is-new' : ''}`}>
                 {renaming === f ? (
                   <input
                     className="fav-rename-input"
@@ -239,18 +286,9 @@ export default function FavFolderPicker({
             ))}
           </div>
 
-          {pickerFolders.length > 0 && <div className="fav-popup-divider" />}
-          <input
-            ref={newFolderRef}
-            className="fav-popup-input"
-            placeholder="New folder…"
-            value={newFolder}
-            onChange={e => setNewFolder(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addNewFolder(); } }}
-          />
+          <div className="fav-popup-divider" />
           <div className="fav-popup-actions">
-            <button className="fav-popup-add" onClick={addNewFolder}>Add</button>
-            <button className="fav-popup-done" onClick={() => setOpen(false)}>Done</button>
+            <button type="button" className="fav-popup-done" onClick={() => setOpen(false)}>Done</button>
           </div>
         </div>,
         document.body,

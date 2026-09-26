@@ -134,6 +134,12 @@ Optional, for the AI features: [Claude Code](https://claude.ai/code) or
 [Codex CLI](https://github.com/openai/codex). For syncing X bookmarks:
 [Field Theory](https://github.com/afar1/fieldtheory-cli).
 
+Optional, for fast offline categorising: [Laya](https://github.com/NandhaKishorM/laya).
+Settings → AI → **Install & train** (or `python/setup_laya.sh`) runs `pip install laya`
+into `~/.tsb/laya-venv` and trains it on the categories your bookmarks already have.
+It labels a bookmark in about 0.1 s against roughly 1 s for Codex, with the same
+agreement on held-out bookmarks. The first install downloads about 2.5 GB.
+
 ### First run
 
 The app walks you through picking a bookmarks source. To just look around, press

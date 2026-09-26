@@ -26,3 +26,6 @@ state.db-journal
 
 # Per-launch API credential for standalone/dev runs — never commit.
 auth-token
+
+# Python bytecode
+__pycache__/

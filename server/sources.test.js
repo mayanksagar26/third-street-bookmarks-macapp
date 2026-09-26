@@ -163,6 +163,19 @@ test('only the named playlists are imported', () => {
   assert.equal(records[0].rawId, 'dQw4w9WgXcQ');
 });
 
+test('playlists.csv gives ids for refresh and is never read as a playlist', () => {
+  const dir = tmpdir();
+  fs.writeFileSync(path.join(dir, 'playlists.csv'),
+    'Playlist ID,Add new videos to top,Playlist Title (Original),Playlist Visibility\n' +
+    'PLabcdefghijklmnopqrstuvwxyz012345,False,Informative,Public\n');
+  fs.writeFileSync(path.join(dir, 'Informative-videos.csv'), 'Video ID\ndQw4w9WgXcQ\n');
+  const { playlists, playlistIds, records } = ytTakeout.readTakeout(dir);
+  assert.deepEqual(Object.keys(playlists), ['Informative']);
+  assert.deepEqual(playlistIds, { Informative: 'PLabcdefghijklmnopqrstuvwxyz012345' });
+  // "Informative" is 11 letters — a video id by shape. It must not become one.
+  assert.deepEqual(records.map(r => r.rawId), ['dQw4w9WgXcQ']);
+});
+
 // ── Instagram ────────────────────────────────────────────────────────────────
 
 function igFixture() {

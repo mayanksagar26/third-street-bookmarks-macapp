@@ -60,6 +60,15 @@ function isYouTube(url) {
   return Boolean(videoId(url) || playlistId(url));
 }
 
+function playlistUrl(list) {
+  return `https://www.youtube.com/playlist?list=${encodeURIComponent(list)}`;
+}
+
+/** The cheapest call that proves a key works: 1 quota unit, throws if not. */
+async function checkKey(apiKey) {
+  await fetchJson(`${API}/videos?part=id&id=dQw4w9WgXcQ&key=${encodeURIComponent(apiKey)}`);
+}
+
 /** The canonical form every YouTube record is keyed and deduped on. */
 function watchUrl(id) {
   return `https://www.youtube.com/watch?v=${id}`;
@@ -234,6 +243,6 @@ async function enrichTitles(records, { limit = 150, concurrency = 6 } = {}) {
 }
 
 module.exports = {
-  videoId, playlistId, isYouTube, watchUrl, toRecord,
+  videoId, playlistId, playlistUrl, checkKey, isYouTube, watchUrl, toRecord,
   viaOembed, importPlaylist, humanDuration, enrichTitles,
 };

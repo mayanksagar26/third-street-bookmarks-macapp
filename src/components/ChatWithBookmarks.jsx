@@ -337,46 +337,35 @@ function loadSystemPrompt() {
   try { return localStorage.getItem('chatSystemPrompt') || DEFAULT_SYSTEM; } catch { return DEFAULT_SYSTEM; }
 }
 
-export default function ChatWithBookmarks({
-  bookmarks, aiBackend: initialBackend, onClose,
-  favMap, favFolders, onSetFavFolders, onRenameFavFolder,
-  explainTarget, onExplainConsumed,
-}) {
+/**
+ * The conversation itself, owned above whichever surface is showing it.
+ *
+ * The chat lives in two places — a small window docked to the side, and the
+ * full column — and moving between them has to carry the conversation along.
+ * Kept inside the component, every switch remounted it: the thread vanished,
+ * and an answer still streaming wrote into a component that no longer existed.
+ */
+export function useBookmarkChat({ bookmarks, aiBackend }) {
   // Built once per collection, not per question: indexing a few thousand
   // bookmarks costs tens of milliseconds, searching one costs under three.
   const index = useMemo(() => buildIndex(bookmarks), [bookmarks]);
 
-  const [aiBackend, setAiBackendLocal]  = useState(initialBackend || 'claude');
-  const [showSysPrompt, setShowSysPrompt] = useState(false);
-  const [systemPrompt, setSystemPrompt]   = useState(loadSystemPrompt);
+  const [systemPrompt, setSystemPrompt] = useState(loadSystemPrompt);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState('');
+  const abortRef = useRef(null);
+  // What the in-flight question matched, so a stopped answer still keeps its
+  // bookmarks.
+  const relevantRef = useRef({ items: [], matched: false, terms: [], missing: [], total: 0 });
 
   function saveSystemPrompt(val) {
     setSystemPrompt(val);
     try { localStorage.setItem('chatSystemPrompt', val); } catch {}
   }
 
-  async function switchBackend(b) {
-    setAiBackendLocal(b);
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ aiBackend: b }),
-    }).catch(() => {});
-  }
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [streaming, setStreaming] = useState('');
-  const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
-  const abortRef = useRef(null);
-  // What the in-flight question matched, so a stopped answer still keeps its
-  // bookmarks.
-  const relevantRef = useRef({ items: [], matched: false, terms: [], missing: [], total: 0 });
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streaming]);
+  const cliName = aiBackend === 'codex' ? 'Codex' : 'Claude Code';
 
   async function sendQuery(query) {
     if (!query.trim() || loading) return;
@@ -434,7 +423,7 @@ export default function ChatWithBookmarks({
         setMessages(prev => [...prev, {
           role: 'assistant',
           type: 'text',
-          text: `Error: ${e.message}. Make sure ${aiBackend === 'codex' ? 'Codex' : 'Claude Code'} CLI is installed and authenticated.`,
+          text: `Error: ${e.message}. Make sure ${cliName} CLI is installed and authenticated.`,
         }]);
         setStreaming('');
       }
@@ -495,7 +484,7 @@ export default function ChatWithBookmarks({
       if (e.name !== 'AbortError') {
         setMessages(prev => [...prev, {
           role: 'assistant', type: 'text',
-          text: `Error: ${e.message}. Make sure ${aiBackend === 'codex' ? 'Codex' : 'Claude Code'} CLI is installed and authenticated.`,
+          text: `Error: ${e.message}. Make sure ${cliName} CLI is installed and authenticated.`,
         }]);
         setStreaming('');
       }
@@ -504,14 +493,7 @@ export default function ChatWithBookmarks({
     }
   }
 
-  // `at` changes on every press, so asking twice about the same card asks twice.
-  useEffect(() => {
-    if (!explainTarget?.bookmark) return;
-    runExplain(explainTarget.bookmark);
-    onExplainConsumed?.();
-  }, [explainTarget?.at]);   // eslint-disable-line react-hooks/exhaustive-deps
-
-  function handleStop() {
+  function stop() {
     abortRef.current?.abort();
     if (streaming) {
       const { text, numbers } = splitSources(streaming);
@@ -528,34 +510,120 @@ export default function ChatWithBookmarks({
     setLoading(false);
   }
 
-  function handleSurprise() {
+  function surprise() {
     const unread = bookmarks.filter(b => !b.isRead && b.text);
     const pool = unread.length > 5 ? unread : bookmarks.filter(b => b.text);
     const pick = pool[Math.floor(Math.random() * pool.length)];
     if (pick) sendQuery(`Tell me more about this bookmark and why it might be interesting: "${(pick.text || '').slice(0, 200)}" by @${pick.authorHandle}`);
   }
 
+  function clear() {
+    stop();
+    setMessages([]);
+  }
+
+  return {
+    messages, input, setInput, loading, streaming,
+    systemPrompt, saveSystemPrompt,
+    sendQuery, runExplain, stop, surprise, clear,
+  };
+}
+
+const BookmarkGlyph = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+  </svg>
+);
+
+/**
+ * The chat surface. `variant` is where it is showing, not a different chat:
+ * `full` takes the middle column, `dock` is the small window at the side.
+ */
+export default function ChatWithBookmarks({
+  chat, variant = 'full',
+  bookmarks, aiBackend, onSetAiBackend,
+  favMap, favFolders, onSetFavFolders, onRenameFavFolder,
+  onClose, onExpand, onDock,
+}) {
+  const docked = variant === 'dock';
+  const [showSysPrompt, setShowSysPrompt] = useState(false);
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
+  const {
+    messages, input, setInput, loading, streaming,
+    systemPrompt, saveSystemPrompt, sendQuery, stop, surprise, clear,
+  } = chat;
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages, streaming]);
+
+  // Opening the window is a request to type into it.
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), docked ? 180 : 0);
+    return () => clearTimeout(t);
+  }, [docked]);
+
   const isEmpty = messages.length === 0 && !streaming;
   const backend = aiBackend === 'codex' ? 'Codex CLI' : 'Claude Code CLI';
 
+  const sysPromptButton = (
+    <button
+      type="button"
+      className={`chat-sys-btn ${showSysPrompt ? 'active' : ''}${docked ? ' is-icon' : ''}`}
+      onClick={() => setShowSysPrompt(p => !p)}
+      title="System instructions"
+      aria-label="System instructions"
+      aria-pressed={showSysPrompt}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+      {!docked && 'Instructions'}
+    </button>
+  );
+
   return (
-    <div className="mode-container">
-      <div className="mode-topbar">
-        <button className="mode-back-btn" onClick={() => { handleStop(); onClose(); }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-          Back
-        </button>
-        <h2 className="mode-title">Chat with Bookmarks</h2>
-        <span className="chat-backend-badge">{backend}</span>
-        <button
-          className={`chat-sys-btn ${showSysPrompt ? 'active' : ''}`}
-          onClick={() => setShowSysPrompt(p => !p)}
-          title="System instructions"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
-          Instructions
-        </button>
-      </div>
+    <div className={`mode-container chat-surface${docked ? ' is-docked' : ''}`}>
+      {docked ? (
+        <div className="chat-dock-bar">
+          <span className="chat-dock-mark"><BookmarkGlyph size={13} /></span>
+          <div className="chat-dock-heading">
+            <h2 className="chat-dock-title">Chat with Bookmarks</h2>
+            <span className="chat-dock-sub">{backend}</span>
+          </div>
+          <div className="chat-dock-tools">
+            {sysPromptButton}
+            {!isEmpty && (
+              <button type="button" className="chat-dock-icon" onClick={clear} title="New chat" aria-label="New chat">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+            )}
+            <button type="button" className="chat-dock-icon" onClick={onExpand} title="Full screen" aria-label="Open chat full screen">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+            </button>
+            <button type="button" className="chat-dock-icon" onClick={onClose} title="Close (Esc)" aria-label="Close chat">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mode-topbar">
+          {/* Leaving full screen doesn't stop the answer — the conversation
+              lives above this view, and closing it is a separate decision. */}
+          <button className="mode-back-btn" onClick={onClose}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+            Back
+          </button>
+          <h2 className="mode-title">Chat with Bookmarks</h2>
+          <span className="chat-backend-badge">{backend}</span>
+          {sysPromptButton}
+          {onDock && (
+            <button type="button" className="chat-sys-btn" onClick={onDock} title="Continue in a small window at the side">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
+              Side window
+            </button>
+          )}
+        </div>
+      )}
 
       {showSysPrompt && (
         <div className="chat-sys-panel">
@@ -578,22 +646,22 @@ export default function ChatWithBookmarks({
         {isEmpty ? (
           <div className="chat-empty">
             <div className="chat-empty-icon">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="var(--accent)">
+              <svg width={docked ? 30 : 40} height={docked ? 30 : 40} viewBox="0 0 24 24" fill="var(--accent)" aria-hidden="true">
                 <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
               </svg>
             </div>
-            <h2 className="chat-title">Chat with your Bookmarks</h2>
+            <h2 className="chat-title">{docked ? 'Ask your bookmarks' : 'Chat with your Bookmarks'}</h2>
 
             {/* AI backend picker */}
             <div className="chat-backend-picker">
               <span className="chat-backend-picker-label">AI Engine</span>
               <button
                 className={`chat-backend-pill ${aiBackend === 'claude' ? 'active' : ''}`}
-                onClick={() => switchBackend('claude')}
+                onClick={() => onSetAiBackend('claude')}
               >⚡ Claude Code CLI</button>
               <button
                 className={`chat-backend-pill ${aiBackend === 'codex' ? 'active' : ''}`}
-                onClick={() => switchBackend('codex')}
+                onClick={() => onSetAiBackend('codex')}
               >🤖 Codex CLI</button>
             </div>
 
@@ -603,22 +671,20 @@ export default function ChatWithBookmarks({
                 <button key={s} className="chat-chip-item" onClick={() => sendQuery(s)}>{s}</button>
               ))}
             </div>
-            <button className="chat-surprise-btn" onClick={handleSurprise}>
+            <button className="chat-surprise-btn" onClick={surprise}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
               Surprise me
             </button>
           </div>
         ) : (
-          <div className="chat-messages">
+          <div className="chat-messages" aria-live="polite">
             {messages.map((msg, i) => (
               <div key={i} className={`chat-message ${msg.role}`}>
                 {msg.role === 'user' ? (
                   <div className="chat-bubble user">{msg.text}</div>
                 ) : (
                   <div className="chat-assistant-msg">
-                    <div className="chat-assistant-icon">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
-                    </div>
+                    <div className="chat-assistant-icon"><BookmarkGlyph /></div>
                     <div className="chat-assistant-body">
                       <div
                         className="chat-assistant-text md"
@@ -641,9 +707,7 @@ export default function ChatWithBookmarks({
             {streaming && (
               <div className="chat-message assistant">
                 <div className="chat-assistant-msg">
-                  <div className="chat-assistant-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
-                  </div>
+                  <div className="chat-assistant-icon"><BookmarkGlyph /></div>
                   <div className="chat-assistant-body">
                     {/* Rendered while streaming too, so the answer doesn't
                         visibly reflow from raw asterisks into formatting at the
@@ -660,9 +724,7 @@ export default function ChatWithBookmarks({
             {loading && !streaming && (
               <div className="chat-message assistant">
                 <div className="chat-assistant-msg">
-                  <div className="chat-assistant-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
-                  </div>
+                  <div className="chat-assistant-icon"><BookmarkGlyph /></div>
                   <div className="chat-typing"><span/><span/><span/></div>
                 </div>
               </div>
@@ -676,22 +738,79 @@ export default function ChatWithBookmarks({
             ref={inputRef}
             className="chat-input"
             placeholder={`Ask ${backend}…`}
+            aria-label="Ask about your bookmarks"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendQuery(input)}
             disabled={loading}
           />
           {loading ? (
-            <button className="chat-send-btn stop" onClick={handleStop} title="Stop">
+            <button type="button" className="chat-send-btn stop" onClick={stop} title="Stop" aria-label="Stop answer">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
             </button>
           ) : (
-            <button className="chat-send-btn" onClick={() => sendQuery(input)} disabled={!input.trim()}>
+            <button type="button" className="chat-send-btn" onClick={() => sendQuery(input)} disabled={!input.trim()} aria-label="Send">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
             </button>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+export const AiSparkle = ({ size = 22 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 2.5l1.65 4.6a4 4 0 0 0 2.4 2.4l4.6 1.65-4.6 1.65a4 4 0 0 0-2.4 2.4L12 19.8l-1.65-4.6a4 4 0 0 0-2.4-2.4L3.35 11.15l4.6-1.65a4 4 0 0 0 2.4-2.4L12 2.5z"/>
+    <path d="M18.6 2.2l.62 1.73c.13.36.4.63.76.76l1.72.61-1.72.62a1.5 1.5 0 0 0-.76.75l-.62 1.73-.61-1.73a1.5 1.5 0 0 0-.76-.75l-1.73-.62 1.73-.61c.36-.13.63-.4.76-.76l.61-1.73z"/>
+    <path d="M5.1 16.1l.5 1.4c.1.29.32.51.6.61l1.4.5-1.4.5c-.28.1-.5.32-.6.6l-.5 1.4-.5-1.4a1.2 1.2 0 0 0-.6-.6l-1.4-.5 1.4-.5c.28-.1.5-.32.6-.61l.5-1.4z"/>
+  </svg>
+);
+
+/** How long the window takes to leave, so it can finish before it unmounts. */
+const DOCK_EXIT_MS = 200;
+
+/**
+ * The launcher in the corner and the small window it opens.
+ *
+ * The window stays mounted for the length of its exit animation: unmounting
+ * on the same frame as the click would cut the animation off before it began.
+ */
+export function ChatDock({ open, hidden, busy, onOpen, children }) {
+  const [present, setPresent] = useState(open);
+  const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    if (open) { setPresent(true); setLeaving(false); return; }
+    if (!present) return;
+    setLeaving(true);
+    const t = setTimeout(() => { setPresent(false); setLeaving(false); }, DOCK_EXIT_MS);
+    return () => clearTimeout(t);
+  }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
+      {!open && !hidden && (
+        <button
+          type="button"
+          className={`chat-launcher${busy ? ' is-busy' : ''}`}
+          onClick={onOpen}
+          title="Chat with Bookmarks (⌘K)"
+          aria-label={busy ? 'Chat with Bookmarks — answering' : 'Chat with Bookmarks'}
+        >
+          <AiSparkle />
+        </button>
+      )}
+      {present && !hidden && (
+        // A region, not a dialog: the feed stays usable beside it, so it neither
+        // traps focus nor claims to be modal.
+        <aside
+          className={`chat-dock${leaving ? ' is-leaving' : ''}`}
+          aria-label="Chat with Bookmarks"
+        >
+          {children}
+        </aside>
+      )}
+    </>
   );
 }

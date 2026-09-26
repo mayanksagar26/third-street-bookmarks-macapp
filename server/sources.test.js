@@ -19,7 +19,7 @@ const yt = require('./ingest/youtube');
 const ytTakeout = require('./ingest/youtube-takeout');
 const instagram = require('./ingest/instagram');
 const { canonical } = require('./ingest/link');
-const { buildAgentArgs, CLAUDE_DENIED_TOOLS } = require('./agent-run');
+const { buildAgentArgs, CLAUDE_DENIED_TOOLS, spawnAgent } = require('./agent-run');
 const { safeUploadName } = require('./security');
 const { extractWanted } = require('./ingest/zip');
 const { execFileSync } = require('child_process');
@@ -638,4 +638,16 @@ test('a caption repeated for a multi-image post is taken once', () => {
   const recs = instagram.readExport(dir).records;
   assert.equal(recs.length, 1);
   assert.equal(recs[0].text, 'some caption text');
+});
+
+// `codex exec` appends a piped stdin to the prompt and waits for it to end.
+// Node's default stdin pipe never ends, so every Codex classify batch hung.
+// `cat` with no arguments has the same shape: it exits only at EOF on stdin.
+test('agents are spawned with stdin closed, so nothing waits on it', async () => {
+  const code = await new Promise((resolve, reject) => {
+    const child = spawnAgent('cat', []);
+    const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('cat waited on stdin')); }, 3000);
+    child.on('close', c => { clearTimeout(timer); resolve(c); });
+  });
+  assert.equal(code, 0);
 });

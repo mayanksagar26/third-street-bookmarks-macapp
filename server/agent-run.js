@@ -112,4 +112,19 @@ function fenceUntrusted(label, body) {
   ].join('\n');
 }
 
-module.exports = { CLAUDE_DENIED_TOOLS, agentEnv, buildAgentArgs, fenceUntrusted };
+/**
+ * Spawn an agent CLI with stdin closed.
+ *
+ * `codex exec` treats a piped stdin as more prompt: "If stdin is piped and a
+ * prompt is also provided, stdin is appended as a <stdin> block". Node's
+ * default stdio is a pipe that nobody ever ends, so Codex sat waiting for EOF
+ * forever — every classify batch hung, and a sync never got past "Classifying…".
+ * The prompt always travels as an argument here, so there is nothing to send
+ * on stdin; `ignore` hands the child /dev/null and it starts immediately.
+ */
+function spawnAgent(cmd, args, options = {}) {
+  const { spawn } = require('child_process');
+  return spawn(cmd, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+module.exports = { CLAUDE_DENIED_TOOLS, agentEnv, buildAgentArgs, fenceUntrusted, spawnAgent };

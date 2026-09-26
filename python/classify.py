@@ -113,13 +113,19 @@ def classify_cli(tweets: list[dict], backend: str) -> list[str]:
 Tweets:
 {lines}"""
 
+    # Same read-only invocation as server/agent-run.js: the prompt carries
+    # bookmark text a stranger wrote, so the agent gets no shell and no writes.
     if backend == 'codex':
-        cmd = ['codex', '--full-auto', '-q', prompt]
+        cmd = ['codex', 'exec', '--sandbox', 'read-only', '--skip-git-repo-check', '--', prompt]
     else:
-        cmd = ['claude', '-p', prompt]
+        cmd = ['claude', '-p', '--disallowedTools', 'Bash', 'Write', 'Edit', 'NotebookEdit',
+               'Task', 'WebFetch', 'WebSearch', '--', prompt]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=120)
+        # stdin=DEVNULL: `codex exec` reads a piped stdin as extra prompt and
+        # waits for it to end — inherited from the server, it never would.
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=180,
+                                stdin=subprocess.DEVNULL)
         raw = result.stdout.strip()
         raw = re.sub(r'^```[a-z]*\n?', '', raw).rstrip('`').strip()
         cats = json.loads(raw)

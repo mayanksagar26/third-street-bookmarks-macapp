@@ -24,6 +24,8 @@
   <img src="https://img.shields.io/badge/macOS-11%2B-black" alt="macOS 11+">
   <img src="https://img.shields.io/badge/Tauri-2-black" alt="Tauri 2">
   <img src="https://img.shields.io/badge/license-MIT-black" alt="MIT">
+  <img src="https://img.shields.io/badge/local--first-black" alt="Local-first">
+  <img src="https://img.shields.io/badge/on--device%20AI-black" alt="On-device AI">
 </p>
 
 ![The feed](docs/screenshots/02-feed.png)

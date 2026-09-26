@@ -183,7 +183,7 @@ export default function App() {
   useEffect(() => {
     fetch('/api/status').then(r => r.json()).then(d => {
       if (d.sync.status === 'running' || d.classify.status === 'running') {
-        setSyncState({ status: 'running', msg: d.classify.status === 'running' ? (d.classify.progress || 'Classifying…') : 'Syncing…' });
+        setSyncState({ status: 'running', msg: d.classify.status === 'running' ? (d.classify.progress || 'Classifying…') : 'Syncing…', run: d.run });
       }
     }).catch(() => {});
   }, []);
@@ -195,25 +195,27 @@ export default function App() {
       fetch('/api/status').then(r => r.json()).then(d => {
         if (d.sync.status === 'running') {
           const msg = d.sync.log ? d.sync.log.split('\n').filter(Boolean).pop()?.trim().slice(0, 40) : '';
-          setSyncState({ status: 'running', msg: msg || 'Syncing bookmarks…' });
+          setSyncState({ status: 'running', msg: msg || 'Syncing bookmarks…', run: d.run });
         } else if (d.classify.status === 'running') {
-          setSyncState({ status: 'running', msg: d.classify.progress || 'Classifying…' });
+          setSyncState({ status: 'running', msg: d.classify.progress || 'Classifying…', run: d.run });
         } else if (d.sync.status === 'error' || d.classify.status === 'error') {
           // ft names the cause and the remedy; both beat "Something went wrong",
           // which sent you looking at this app for a problem that is usually an
           // expired X session in whichever browser the sync reads.
-          const detail = [d.sync.error, d.sync.fix].filter(Boolean).join(' ');
-          setSyncState({ status: 'error', msg: detail || 'Something went wrong' });
+          const detail = [d.sync.error, d.sync.fix, d.run?.note].filter(Boolean).join(' ');
+          setSyncState({ status: 'error', msg: detail || 'Something went wrong', run: d.run });
           clearInterval(timer);
         } else {
-          setSyncState({ status: 'done', msg: 'Done ✓ — reloading…' });
+          // The run's own summary ("20 new bookmarks classified and saved.")
+          // stays up for a few seconds — it is the one line that says it worked.
+          setSyncState({ status: 'done', msg: d.run?.note || 'Done ✓', run: d.run });
           clearInterval(timer);
           setTimeout(() => {
             fetch('/api/bookmarks?t=' + Date.now()).then(r => r.json()).then(data => {
               setAllBookmarks(data);
-              setSyncState({ status: 'idle', msg: '' });
             }).catch(() => {});
-          }, 1500);
+          }, 500);
+          setTimeout(() => setSyncState({ status: 'idle', msg: '' }), 6000);
         }
       }).catch(() => {});
     }, 3000);
@@ -606,7 +608,7 @@ export default function App() {
       const r = await fetch('/api/syncall', { method: 'POST' });
       const d = await r.json();
       if (!d.ok) { setSyncState({ status: 'error', msg: d.msg }); return; }
-      setSyncState({ status: 'running', msg: 'Connecting to X…' });
+      setSyncState({ status: 'running', msg: 'Connecting to X…', run: { phase: 'syncing', done: 0, total: 0 } });
     } catch {
       setSyncState({ status: 'error', msg: 'Server not reachable' });
     }

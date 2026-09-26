@@ -70,6 +70,61 @@ function lastActiveHint(iso) {
   return `last active ${days} days ago`;
 }
 
+/**
+ * The Sync & Classify run as a bar: syncing and exporting are indeterminate
+ * (ft reports no totals), classifying fills as batches land, saving is the
+ * database write and export that follow. The step list under it says which
+ * part you are waiting on, so a long classify no longer reads as a hang.
+ */
+const SYNC_STEPS = [
+  { id: 'syncing', label: 'Sync' },
+  { id: 'classifying', label: 'Classify' },
+  { id: 'saving', label: 'Save' },
+];
+
+function SyncProgress({ run, finished }) {
+  const phase = finished ? 'done' : run.phase;
+  const counting = (phase === 'classifying' || phase === 'training') && run.total > 0;
+  const pct = phase === 'done' ? 100
+    : counting ? Math.round((run.done / run.total) * 100)
+    : phase === 'saving' ? 100 : null;
+  const engine = run.engineLabel || run.engine;
+  const label = {
+    syncing: 'Fetching new bookmarks from X…',
+    exporting: 'Reading what the sync brought in…',
+    training: `Laya is retraining on your labels${run.total ? ` · ${run.done}/${run.total}` : '…'}`,
+    classifying: run.total
+      ? `Classifying ${run.done} / ${run.total} new${engine ? ` with ${engine}` : ''}`
+      : `Classifying${engine ? ` with ${engine}` : ''}…`,
+    saving: 'Saving categories to your bookmarks database…',
+    done: run.note || 'Done',
+  }[phase] || 'Working…';
+  const stepIndex = { syncing: 0, exporting: 1, training: 1, classifying: 1, saving: 2, done: 3 }[phase] ?? 0;
+
+  return (
+    <div className="sync-progress" role="status" aria-live="polite">
+      <div
+        className={`sync-progress-track ${pct === null ? 'indeterminate' : ''}`}
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct ?? undefined}
+        aria-label="Sync and classify progress"
+      >
+        <div className="sync-progress-fill" style={pct === null ? undefined : { width: `${pct}%` }} />
+      </div>
+      <div className="sync-progress-label">{label}</div>
+      <ol className="sync-progress-steps">
+        {SYNC_STEPS.map((step, i) => (
+          <li key={step.id} className={i < stepIndex ? 'done' : i === stepIndex ? 'current' : ''}>
+            {step.label}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 export default function RightPanel({
   bookmarks, currentVoice, onVoiceClick,
   syncState, onSync,
@@ -351,7 +406,10 @@ export default function RightPanel({
           </svg>
           Sync via {source.label}
         </button>
-        {syncState.msg && (
+        {syncState.status !== 'idle' && syncState.run && syncState.status !== 'error' && (
+          <SyncProgress run={syncState.run} finished={syncState.status === 'done'} />
+        )}
+        {syncState.msg && !(syncState.run && ['running', 'done'].includes(syncState.status)) && (
           <div
             className={`action-status ${syncState.status === 'error' ? 'error' : ''}`.trim()}
             style={{ marginTop: 6 }}

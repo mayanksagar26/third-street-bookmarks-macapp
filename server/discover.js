@@ -19,7 +19,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { agentEnv, buildAgentArgs, fenceUntrusted } = require('./agent-run');
+const { agentEnv, buildAgentArgs, fenceUntrusted, spawnAgent } = require('./agent-run');
 
 const HOME = os.homedir();
 
@@ -239,7 +239,7 @@ function askAgent({ runtime, binary, candidates, timeoutMs = 90_000 }) {
     let output = '';
     let settled = false;
 
-    const child = spawn(binary, args, { env: agentEnv() });
+    const child = spawnAgent(binary, args, { env: agentEnv() });
 
     const finish = value => {
       if (settled) return;

@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { detectRuntimes, findBinary } = require('./agents');
 const { discover } = require('./discover');
-const { agentEnv, buildAgentArgs, fenceUntrusted } = require('./agent-run');
+const { agentEnv, buildAgentArgs, fenceUntrusted, spawnAgent } = require('./agent-run');
 const store = require('./sources-store');
 const hn = require('./ingest/hn');
 const yt = require('./ingest/youtube');
@@ -76,7 +76,8 @@ function bookmarksPath() {
 }
 
 const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json');
-const FT = path.join(os.homedir(), '.npm-global/bin/ft');
+// FT_BIN points at another `ft` (tests, a fake sync); otherwise the npm-global one.
+const FT = process.env.FT_BIN || path.join(os.homedir(), '.npm-global/bin/ft');
 const CLASSIFY_PY = path.join(SCRIPT_DIR, 'classify.py');
 const LAYA_PY = path.join(SCRIPT_DIR, 'laya_classify.py');
 const LAYA_SETUP = path.join(SCRIPT_DIR, 'setup_laya.sh');
@@ -463,7 +464,7 @@ const procs  = { sync: null, classify: null, laya: null };
 const logs   = { sync: [], classify: [], laya: [] };
 const status = { sync: 'idle', classify: 'idle', laya: 'idle' };
 
-function runProc(key, cmd, args, onDone) {
+function runProc(key, cmd, args, onDone, onOutput) {
   if (procs[key]) return false;
   logs[key] = [];
   status[key] = 'running';
@@ -471,7 +472,7 @@ function runProc(key, cmd, args, onDone) {
     env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH },
   });
   procs[key] = proc;
-  proc.stdout.on('data', d => logs[key].push(d.toString()));
+  proc.stdout.on('data', d => { logs[key].push(d.toString()); onOutput?.(d.toString()); });
   proc.stderr.on('data', d => logs[key].push(d.toString()));
   proc.on('close', code => {
     status[key] = code === 0 ? 'done' : 'error';
@@ -1339,7 +1340,7 @@ app.post('/api/chat', (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no');
 
   const cmd = backend === 'codex' ? 'codex' : 'claude';
-  const proc = spawn(cmd, buildAgentArgs(backend, prompt), {
+  const proc = spawnAgent(cmd, buildAgentArgs(backend, prompt), {
     env: agentEnv(EXTRA_PATH),
   });
 
@@ -1419,7 +1420,7 @@ app.post('/api/explain', (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no');
 
   const cmd = backend === 'codex' ? 'codex' : 'claude';
-  const proc = spawn(cmd, buildAgentArgs(backend, prompt, { web }), { env: agentEnv(EXTRA_PATH) });
+  const proc = spawnAgent(cmd, buildAgentArgs(backend, prompt, { web }), { env: agentEnv(EXTRA_PATH) });
   proc.stdout.on('data', d => { if (!res.writableEnded) res.write(d); });
   proc.stderr.on('data', () => {});
   proc.on('close', () => { if (!res.writableEnded) res.end(); });
@@ -1459,7 +1460,7 @@ app.post('/api/classify-ai', (req, res) => {
       cmd = 'claude'; args = buildAgentArgs('claude', prompt);
     }
 
-    const proc = spawn(cmd, args, { env: agentEnv(EXTRA_PATH) });
+    const proc = spawnAgent(cmd, args, { env: agentEnv(EXTRA_PATH) });
 
     let out = '';
     proc.stdout.on('data', d => { out += d.toString(); });
@@ -1627,6 +1628,21 @@ app.post('/api/laya/setup', (req, res) => {
   res.json({ ok: started });
 });
 
+// ── Sync progress ─────────────────────────────────────────────────────────────
+// What the Sync & Classify box draws its bar from. `phase` walks
+//   syncing → exporting → classifying (done/total) → saving → done
+// with `training` in between when Laya retrains first. Kept as structure rather
+// than scraped from log lines, because the log is several processes' output
+// interleaved and the bar needs numbers, not prose.
+const syncProgress = { phase: 'idle', done: 0, total: 0, engine: null, saved: 0, fallback: 0, note: null };
+function setProgress(patch) { Object.assign(syncProgress, patch); }
+
+const ENGINE_LABELS = { python: 'keyword rules', laya: 'Laya', claude: 'Claude', codex: 'Codex' };
+
+// Long enough for a slow agent turn on 20 bookmarks (they usually take ~20 s),
+// short enough that a stuck one can't hold the sync for the rest of the day.
+const CLASSIFY_BATCH_TIMEOUT_MS = 3 * 60 * 1000;
+
 app.post('/api/syncall', (req, res) => {
   if (status.sync === 'running' || status.classify === 'running') {
     return res.json({ ok: false, msg: 'Already running' });
@@ -1639,9 +1655,28 @@ app.post('/api/syncall', (req, res) => {
   if (!resolveBin('fieldtheory')) {
     return res.json({ ok: false, msg: 'ft not installed — bring your own bookmarks.json' });
   }
+  const engine = settings.classifyBackend || 'python';
+  setProgress({ phase: 'syncing', done: 0, total: 0, engine, saved: 0, fallback: 0, note: null });
   runFieldTheorySync(settings);
   res.json({ ok: true });
 });
+
+/** Parse "Categories: 12/20" or "Embedded: 256/300" out of a classifier's stdout. */
+function trackClassifierOutput(chunk) {
+  if (/Training on \d+/.test(chunk)) setProgress({ phase: 'training', done: 0, total: 0 });
+  const starting = chunk.match(/Classifying (\d+) /);
+  if (starting) setProgress({ phase: 'classifying', done: 0, total: Number(starting[1]) });
+  const counts = [...chunk.matchAll(/(?:Categories|Embedded):\s+(\d+)\/(\d+)/g)].pop();
+  if (counts) setProgress({ done: Number(counts[1]), total: Number(counts[2]) });
+  const finished = chunk.match(/Done\. (\d+) /);
+  if (finished) setProgress({ saved: Number(finished[1]) });
+}
+
+function finishClassify(note) {
+  status.classify = 'done';
+  setProgress({ phase: 'done', note });
+  logs.classify.push(`${note}\n`);
+}
 
 function runFieldTheorySync(settings) {
   const FT_BIN = resolveBin('fieldtheory') || FT;
@@ -1652,7 +1687,7 @@ function runFieldTheorySync(settings) {
     // burns an agent run per batch to relabel bookmarks that already carry the
     // same labels, and ends with status `done` — which read, to anyone watching
     // the panel, as though the sync had worked.
-    if (code !== 0) return;
+    if (code !== 0) { setProgress({ phase: 'error' }); return; }
 
     const classifyBackend = settings.classifyBackend || 'python';
     status.classify = 'running';
@@ -1665,7 +1700,8 @@ function runFieldTheorySync(settings) {
     // on rows we already had, but don't spend a classifier run on old labels.
     if (newIds && newIds.size === 0) {
       logs.classify.push('No new bookmarks — nothing to classify.\n');
-      runExport(() => { status.classify = 'done'; });
+      setProgress({ phase: 'saving' });
+      runExport(() => finishClassify('No new bookmarks.'));
       return;
     }
 
@@ -1676,89 +1712,140 @@ function runFieldTheorySync(settings) {
       const idsFile = newIds ? writeIdsFile(newIds) : null;
       const args = idsFile ? [CLASSIFY_PY, `--ids-file=${idsFile}`] : [CLASSIFY_PY];
       if (classifyBackend === 'laya') args.push('--backend=laya');
-      runProc('classify', 'python3', args, () => {
+      setProgress({ phase: 'classifying', done: 0, total: newIds ? newIds.size : 0 });
+      runProc('classify', 'python3', args, (pyCode) => {
+        // runProc marks the step done as the classifier exits; the export
+        // after it is still part of this run, so the panel keeps waiting.
+        status.classify = 'running';
         if (idsFile) { try { fs.unlinkSync(idsFile); } catch {} }
-        runExport(() => { status.classify = 'done'; });
-      });
-    } else {
-      // 1. export first so we have JSON to classify
-      // 2. classify with AI CLI, 3. write categories back
-      const aiCmd = classifyBackend === 'codex' ? 'codex' : 'claude';
-      // Logged here rather than above the backend split: runProc clears
-      // logs.classify when it starts the python classifier, which would take
-      // this line with it.
-      if (newIds) {
-        logs.classify.push(`${newIds.size} new bookmark${newIds.size === 1 ? '' : 's'} from this sync.\n`);
-      }
-      logs.classify.push(`Exporting bookmarks…\n`);
-
-      runExport(() => {
-        let data;
-        try { data = readBookmarks(); } catch { status.classify = 'error'; return; }
-
-        // `newIds` holds bare tweet ids from SQLite, so rows are matched on the
-        // id that DB knows them by. Rows from other sources answer null and
-        // fall out: this panel syncs X, and nothing here fetched them.
-        const pending = data.filter(b =>
-          (!b.primaryCategory || b.primaryCategory === '' || b.primaryCategory === 'unclassified') &&
-          (!newIds || newIds.has(xDbId(b)))
-        );
-
-        if (!pending.length) {
-          logs.classify.push('Nothing new to classify.\n');
-          status.classify = 'done';
-          return;
-        }
-
-        logs.classify.push(`Classifying ${pending.length} new bookmarks with ${aiCmd}…\n`);
-        const batchSize = 20;
-        const assigned = [];
-        let done = 0;
-
-        function runBatch(i) {
-          if (i >= pending.length) {
-            try { writeBookmarks(data); } catch {}
-            // Back into SQLite as well, or the next sync's export resets them.
-            saveCategoriesToDb(assigned);
-            status.classify = 'done';
-            logs.classify.push(`Done. ${done} classified.\n`);
-            return;
-          }
-          const batch = pending.slice(i, i + batchSize);
-          const lines = batch.map((b, idx) => `${idx + 1}. ${(b.text || '').slice(0, 300)}`).join('\n');
-          const prompt = `Classify tweets into one of: ${CATEGORIES.join(', ')}. Return ONLY a JSON array. No markdown.\n\n${lines}`;
-          const args2 = buildAgentArgs(classifyBackend === 'codex' ? 'codex' : 'claude', prompt);
-
-          const proc = spawn(aiCmd, args2, { env: agentEnv(EXTRA_PATH) });
-          let out = '';
-          proc.stdout.on('data', d => { out += d.toString(); });
-          proc.on('close', code => {
-            if (code === 0) {
-              try {
-                const clean = out.trim().replace(/^```[a-z]*\n?/, '').replace(/```$/, '').trim();
-                const cats = JSON.parse(clean);
-                batch.forEach((b, idx) => {
-                  const cat = cats[idx];
-                  const valid = CATEGORIES.includes(cat) ? cat : 'misc';
-                  const bm = data.find(d => d.id === b.id);
-                  if (bm) {
-                    bm.primaryCategory = valid;
-                    bm.categories = [valid];
-                    const dbId = xDbId(bm);
-                    if (dbId) assigned.push({ id: dbId, category: valid });
-                  }
-                });
-                done += batch.length;
-              } catch {}
-            }
-            logs.classify.push(`Categories: ${Math.min(i + batchSize, pending.length)}/${pending.length}\n`);
-            runBatch(i + batchSize);
-          });
-          proc.on('error', () => { status.classify = 'error'; });
-        }
-        runBatch(0);
-      });
+        const { saved, total } = syncProgress;
+        setProgress({ phase: 'saving', done: total, total });
+        runExport(() => finishClassify(pyCode === 0
+          ? `${saved || total} new bookmark${(saved || total) === 1 ? '' : 's'} classified and saved.`
+          : 'Classifier failed — see the log. New bookmarks are saved, unclassified.'));
+      }, trackClassifierOutput);
+      return;
     }
+
+    // Claude / Codex:
+    // 1. export so there is JSON to read the new rows from,
+    // 2. classify in batches of 20 with the agent CLI,
+    // 3. write the labels into SQLite, then export again so bookmarks.json is
+    //    rebuilt from the database — one source of truth, nothing to drift.
+    const aiCmd = classifyBackend === 'codex' ? 'codex' : 'claude';
+    // Logged here rather than above the backend split: runProc clears
+    // logs.classify when it starts the python classifier, which would take
+    // this line with it.
+    if (newIds) {
+      logs.classify.push(`${newIds.size} new bookmark${newIds.size === 1 ? '' : 's'} from this sync.\n`);
+    }
+    logs.classify.push(`Exporting bookmarks…\n`);
+    setProgress({ phase: 'exporting' });
+
+    runExport(() => {
+      let data;
+      try { data = readBookmarks(); } catch (e) {
+        status.classify = 'error';
+        setProgress({ phase: 'error', note: `Couldn't read the export: ${e.message}` });
+        return;
+      }
+
+      // `newIds` holds bare tweet ids from SQLite, so rows are matched on the
+      // id that DB knows them by. Rows from other sources answer null and
+      // fall out: this panel syncs X, and nothing here fetched them.
+      const pending = data.filter(b =>
+        (!b.primaryCategory || b.primaryCategory === '' || b.primaryCategory === 'unclassified') &&
+        (!newIds || newIds.has(xDbId(b)))
+      );
+
+      if (!pending.length) {
+        finishClassify('Nothing new to classify.');
+        return;
+      }
+
+      logs.classify.push(`Classifying ${pending.length} new bookmarks with ${aiCmd}…\n`);
+      setProgress({ phase: 'classifying', done: 0, total: pending.length });
+      const batchSize = 20;
+      const assigned = [];
+      const failed = [];
+
+      function finish() {
+        setProgress({ phase: 'saving', done: pending.length });
+        const saved = saveCategoriesToDb(assigned);
+        const fallbackIds = failed.map(xDbId).filter(Boolean);
+        const done = (extra = '') => runExport(() => finishClassify(
+          `${saved + fallbackIds.length} new bookmark${saved + fallbackIds.length === 1 ? '' : 's'} classified and saved` +
+          `${extra}.`));
+        setProgress({ saved });
+        if (!fallbackIds.length) return done();
+        // A batch the agent couldn't answer gets the keyword rules rather than
+        // staying `unclassified`: later syncs only classify what they bring in,
+        // so anything left behind here would never be picked up again.
+        logs.classify.push(`${fallbackIds.length} couldn't be classified by ${aiCmd} — using keyword rules for those.\n`);
+        setProgress({ fallback: fallbackIds.length });
+        const idsFile = writeIdsFile(new Set(fallbackIds));
+        const proc = spawn('python3', [CLASSIFY_PY, `--ids-file=${idsFile}`, '--backend=regex'], {
+          env: { ...process.env, PATH: process.env.PATH + ':' + EXTRA_PATH },
+        });
+        proc.stdout.on('data', d => logs.classify.push(d.toString()));
+        proc.stderr.on('data', d => logs.classify.push(d.toString()));
+        proc.on('close', () => {
+          try { fs.unlinkSync(idsFile); } catch {}
+          done(` (${fallbackIds.length} by keyword rules after ${aiCmd} failed)`);
+        });
+      }
+
+      function runBatch(i) {
+        if (i >= pending.length) return finish();
+        const batch = pending.slice(i, i + batchSize);
+        const lines = batch.map((b, idx) => `${idx + 1}. ${(b.text || '').slice(0, 300)}`).join('\n');
+        const prompt = `Classify tweets into one of: ${CATEGORIES.join(', ')}. Return ONLY a JSON array. No markdown.\n\n${lines}`;
+        const args2 = buildAgentArgs(classifyBackend === 'codex' ? 'codex' : 'claude', prompt);
+
+        const proc = spawnAgent(aiCmd, args2, { env: agentEnv(EXTRA_PATH) });
+        let out = '';
+        let settled = false;
+        const timer = setTimeout(() => {
+          logs.classify.push(`${aiCmd} took over ${CLASSIFY_BATCH_TIMEOUT_MS / 60000} minutes on one batch — stopping it.\n`);
+          try { proc.kill('SIGKILL'); } catch {}
+        }, CLASSIFY_BATCH_TIMEOUT_MS);
+
+        const next = (ok, cats) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          batch.forEach((b, idx) => {
+            const cat = ok ? cats[idx] : null;
+            if (!ok || typeof cat !== 'string') { failed.push(b); return; }
+            const dbId = xDbId(b);
+            if (dbId) assigned.push({ id: dbId, category: CATEGORIES.includes(cat) ? cat : 'misc' });
+          });
+          const done = Math.min(i + batchSize, pending.length);
+          logs.classify.push(`Categories: ${done}/${pending.length}\n`);
+          setProgress({ done });
+          runBatch(i + batchSize);
+        };
+
+        proc.stdout.on('data', d => { out += d.toString(); });
+        proc.on('close', code => {
+          if (code !== 0) return next(false);
+          try {
+            const clean = out.trim().replace(/^```[a-z]*\n?/, '').replace(/```$/, '').trim();
+            const cats = JSON.parse(clean);
+            if (!Array.isArray(cats)) throw new Error('not a list');
+            next(true, cats);
+          } catch {
+            logs.classify.push(`${aiCmd} answered with something other than a list — skipping that batch.\n`);
+            next(false);
+          }
+        });
+        proc.on('error', e => {
+          logs.classify.push(`Couldn't start ${aiCmd}: ${e.message}\n`);
+          next(false);
+        });
+      }
+      runBatch(0);
+    });
   });
 }
 
@@ -1786,6 +1873,8 @@ app.get('/api/status', (req, res) => {
   res.json({
     sync:     { status: status.sync,     log: logs.sync.slice(-5).join(''), ...failure },
     classify: { status: status.classify, log: logs.classify.slice(-3).join(''), progress: m ? m[m.length - 1] : null },
+    // Structured, for the progress bar; `progress` above stays for older clients.
+    run: { ...syncProgress, engineLabel: ENGINE_LABELS[syncProgress.engine] || syncProgress.engine },
   });
 });
 

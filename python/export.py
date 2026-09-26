@@ -6,11 +6,12 @@ Usage: python3 export.py [path/to/bookmarks.json]
 """
 
 import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
 
-DB_PATH   = Path.home() / ".ft-bookmarks/bookmarks.db"
+DB_PATH   = Path(os.environ.get("FT_DB", Path.home() / ".ft-bookmarks/bookmarks.db"))
 JSON_PATH = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parent / "bookmarks.json"
 
 

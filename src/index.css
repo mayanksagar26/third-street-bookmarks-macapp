@@ -3500,3 +3500,33 @@ kbd {
 }
 .yt-sync-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
 .yt-sync-when { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; }
+
+/* Sync & Classify progress — a bar, one line saying what's happening, and the
+   three steps so a long classify doesn't read as a hang. */
+.sync-progress { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.sync-progress-track {
+  position: relative; height: 6px; border-radius: 999px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+.sync-progress-fill {
+  height: 100%; border-radius: inherit; background: var(--accent);
+  transition: width 0.4s ease;
+}
+.sync-progress-track.indeterminate .sync-progress-fill {
+  position: absolute; width: 35%;
+  animation: sync-slide 1.3s ease-in-out infinite;
+}
+@keyframes sync-slide { from { left: -35%; } to { left: 100%; } }
+@media (prefers-reduced-motion: reduce) {
+  .sync-progress-track.indeterminate .sync-progress-fill { animation: none; left: 0; width: 100%; opacity: 0.4; }
+}
+.sync-progress-label { font-size: 11.5px; color: var(--text-secondary); line-height: 1.4; padding: 0 2px; }
+.sync-progress-steps {
+  display: flex; gap: 12px; list-style: none; margin: 0; padding: 0 2px;
+  font-size: 10.5px; color: var(--text-tertiary);
+}
+.sync-progress-steps li::before { content: '○ '; }
+.sync-progress-steps li.current { color: var(--accent); }
+.sync-progress-steps li.current::before { content: '● '; }
+.sync-progress-steps li.done { color: var(--text-secondary); }
+.sync-progress-steps li.done::before { content: '✓ '; }

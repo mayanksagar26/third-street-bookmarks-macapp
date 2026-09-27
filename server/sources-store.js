@@ -20,6 +20,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { writeJsonAtomic } = require('./durable');
 
 /** Sources that keep their own file under sources/. X is not one: `ft` owns it. */
 const MANAGED = ['hn', 'yt', 'ig', 'link'];
@@ -83,12 +84,9 @@ function readSource(dataDir, source) {
 function writeSource(dataDir, source, records) {
   const dir = sourcesDir(dataDir);
   fs.mkdirSync(dir, { recursive: true });
-  const file = sourceFile(dataDir, source);
   // Write-then-rename: a crash mid-write leaves the previous list intact
   // rather than a truncated file that parses as an empty collection.
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(records, null, 2));
-  fs.renameSync(tmp, file);
+  writeJsonAtomic(sourceFile(dataDir, source), records);
 }
 
 /**

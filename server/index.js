@@ -8,6 +8,7 @@ const { detectRuntimes, findBinary } = require('./agents');
 const { discover } = require('./discover');
 const { agentEnv, buildAgentArgs, fenceUntrusted, spawnAgent } = require('./agent-run');
 const store = require('./sources-store');
+const { writeJsonAtomic, withFileLock, openWritableDb } = require('./durable');
 const hn = require('./ingest/hn');
 const yt = require('./ingest/youtube');
 const ytTakeout = require('./ingest/youtube-takeout');
@@ -181,8 +182,7 @@ function openDb() {
   if (db) return db;
   if (!fs.existsSync(DB_PATH)) return null;
   try {
-    const Database = require('better-sqlite3');
-    db = new Database(DB_PATH);
+    db = openWritableDb(DB_PATH, { wal: false });
     // Ensure columns exist (safe to run multiple times)
     db.exec(`
       CREATE TABLE IF NOT EXISTS bookmark_ui_state (id TEXT PRIMARY KEY, is_read INTEGER DEFAULT 0, fav_folder TEXT);
@@ -191,8 +191,7 @@ function openDb() {
   } catch {
     // ALTER TABLE fails if column already exists — that's fine
     try {
-      const Database = require('better-sqlite3');
-      db = new Database(DB_PATH);
+      db = openWritableDb(DB_PATH, { wal: false });
     } catch { db = null; }
   }
   return db;
@@ -212,9 +211,8 @@ let stateDb = null;
 function openStateDb() {
   if (stateDb) return stateDb;
   try {
-    const Database = require('better-sqlite3');
     if (!fs.existsSync(STATE_DIR)) fs.mkdirSync(STATE_DIR, { recursive: true });
-    stateDb = new Database(STATE_DB_PATH);
+    stateDb = openWritableDb(STATE_DB_PATH);
     stateDb.exec(`
       CREATE TABLE IF NOT EXISTS user_state (
         id TEXT PRIMARY KEY,
@@ -240,7 +238,10 @@ function openStateDb() {
       CREATE INDEX IF NOT EXISTS idx_fav_folder ON fav_membership (folder);
     `);
     migrateState(stateDb);
-  } catch { stateDb = null; }
+  } catch (e) {
+    console.error(`  [state.db] could not open ${STATE_DB_PATH}: ${e.message}`);
+    stateDb = null;
+  }
   return stateDb;
 }
 
@@ -264,7 +265,10 @@ function migrateState(conn) {
         }
       });
       tx(data);
-    } catch {}
+    } catch (e) {
+      // No bookmarks.json yet is a fresh install, not a failure.
+      if (e.code !== 'ENOENT') console.error(`  [state.db] seeding from bookmarks.json failed: ${e.message}`);
+    }
     try {
       const ftDb = openDb();
       if (ftDb) {
@@ -277,7 +281,9 @@ function migrateState(conn) {
         const tx = conn.transaction(rs => { for (const r of rs) up.run(store.nsId('x', r.id), r.is_read, r.fav_folder, r.color_label, now); });
         tx(rows);
       }
-    } catch {}
+    } catch (e) {
+      console.error(`  [state.db] seeding from Field Theory's DB failed: ${e.message}`);
+    }
     console.log(`  [state.db] seeded user state for ${seeded} bookmarks`);
   }
 
@@ -299,7 +305,9 @@ function migrateState(conn) {
       tx();
       console.log(`  [state.db] fav_membership rows: ${conn.prepare('SELECT COUNT(*) c FROM fav_membership').get().c}`);
     }
-  } catch {}
+  } catch (e) {
+    console.error(`  [state.db] fav_membership backfill failed: ${e.message}`);
+  }
 
   migrateIds(conn);
 }
@@ -338,11 +346,23 @@ function migrateIds(conn) {
   }
 }
 
+// A state write that didn't land must reach the caller: the UI would otherwise
+// show a favourite or note that is gone on the next load.
+function stateWriteFailed(what, e) {
+  console.error(`  [state.db] ${what} failed: ${e.message}`);
+  return e;
+}
+
+function requireStateDb() {
+  const conn = openStateDb();
+  if (!conn) throw new Error('state db unavailable');
+  return conn;
+}
+
 // Partial upsert: only writes the fields present in `fields`, so null is a real
 // value (un-favourite, clear note) rather than "leave unchanged".
 function stateUpsert(id, fields) {
-  const conn = openStateDb();
-  if (!conn) return;
+  const conn = requireStateDb();
   try {
     conn.prepare('INSERT OR IGNORE INTO user_state (id, updated_at) VALUES (?, ?)').run(id, new Date().toISOString());
     const map = { isRead: 'is_read', colorLabel: 'color_label', note: 'note' };  // folders → fav_membership
@@ -357,7 +377,7 @@ function stateUpsert(id, fields) {
     sets.push('updated_at = ?'); vals.push(new Date().toISOString());
     vals.push(id);
     conn.prepare(`UPDATE user_state SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
-  } catch {}
+  } catch (e) { throw stateWriteFailed(`update of ${id}`, e); }
 }
 
 // ── Favourite folders (many-to-many) ─────────────────────────────────────────
@@ -390,8 +410,7 @@ function favAllFolders() {
 
 // Replace a bookmark's folder set with `folders` (the desired full list).
 function favSetFolders(id, folders) {
-  const conn = openStateDb();
-  if (!conn) return [];
+  const conn = requireStateDb();
   const clean = [...new Set((folders || []).map(f => String(f).trim()).filter(Boolean))];
   try {
     const tx = conn.transaction(() => {
@@ -401,14 +420,13 @@ function favSetFolders(id, folders) {
       for (const f of clean) ins.run(id, f, now);
     });
     tx();
-  } catch {}
+  } catch (e) { throw stateWriteFailed(`favourite folders for ${id}`, e); }
   return clean;
 }
 
 // Rename a folder everywhere; merges into `to` if it already exists.
 function favRenameFolder(from, to) {
-  const conn = openStateDb();
-  if (!conn) return;
+  const conn = requireStateDb();
   const f = String(from || '').trim(), t = String(to || '').trim();
   if (!f || !t || f === t) return;
   try {
@@ -420,7 +438,7 @@ function favRenameFolder(from, to) {
       conn.prepare('DELETE FROM fav_membership WHERE folder = ?').run(f);
     });
     tx();
-  } catch {}
+  } catch (e) { throw stateWriteFailed(`folder rename ${f} → ${t}`, e); }
 }
 
 // Overlay state.db onto a bookmark array by id — the DB wins, always.
@@ -510,7 +528,7 @@ function readSettings() {
 }
 
 function writeSettings(data) {
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(data, null, 2));
+  writeJsonAtomic(SETTINGS_PATH, data);
 }
 
 // ── Bookmarks I/O ─────────────────────────────────────────────────────────────
@@ -522,7 +540,7 @@ function readXBookmarks() {
 }
 
 function writeXBookmarks(data) {
-  fs.writeFileSync(bookmarksPath(), JSON.stringify(data, null, 2));
+  writeJsonAtomic(bookmarksPath(), data);
 }
 
 // Everything below this line sees one collection. The split back into
@@ -534,6 +552,15 @@ function readBookmarks() {
 
 function writeBookmarks(data) {
   store.writeAll(DATA_DIR, data, writeXBookmarks);
+}
+
+// Every read-modify-write of the collection runs under one lockfile in the
+// shared state dir, so a second server on the same ~/.tsb can't read the
+// collection between our read and our write and then overwrite our change.
+// `fn` must re-read inside the lock rather than reuse a copy loaded earlier.
+function withBookmarksLock(fn) {
+  fs.mkdirSync(STATE_DIR, { recursive: true });
+  return withFileLock(path.join(STATE_DIR, 'bookmarks.lock'), fn);
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -718,7 +745,7 @@ app.get('/api/source-counts', (req, res) => {
  * same everywhere, and so no route can forget that re-importing is normal.
  */
 function ingest(source, records) {
-  const { added, total } = store.upsertSource(DATA_DIR, source, records);
+  const { added, total } = withBookmarksLock(() => store.upsertSource(DATA_DIR, source, records));
   return { ok: true, added, skipped: records.length - added, total };
 }
 
@@ -1085,8 +1112,13 @@ app.delete('/api/saved/:id', (req, res) => {
   if (!store.MANAGED.includes(source)) {
     return res.status(400).json({ error: 'That bookmark belongs to a synced source' });
   }
-  const removed = store.removeFromSource(DATA_DIR, source, req.params.id);
-  res.json({ ok: true, removed });
+  try {
+    const removed = withBookmarksLock(() => store.removeFromSource(DATA_DIR, source, req.params.id));
+    res.json({ ok: true, removed });
+  } catch (e) {
+    console.error(`  [saved] remove ${req.params.id} failed: ${e.message}`);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Voice preferences (per-author → TTS provider/voice), owned by state.db ─────
@@ -1128,16 +1160,18 @@ app.get('/api/bookmarks', (req, res) => {
 // parameterised route would otherwise swallow this path as id="bulk".
 app.post('/api/read/bulk', (req, res) => {
   try {
-    const { ids, read } = req.body;
-    const data = readBookmarks();
-    const updated = [];
-    (ids || []).forEach(id => {
-      const bm = data.find(b => b.id === id || b.tweetId === id);
-      if (bm) { bm.isRead = read !== false; updated.push(bm.id); }
+    withBookmarksLock(() => {
+      const { ids, read } = req.body;
+      const data = readBookmarks();
+      const updated = [];
+      (ids || []).forEach(id => {
+        const bm = data.find(b => b.id === id || b.tweetId === id);
+        if (bm) { bm.isRead = read !== false; updated.push(bm.id); }
+      });
+      writeBookmarks(data);
+      updated.forEach(id => stateUpsert(id, { isRead: read !== false }));
+      res.json({ updated });
     });
-    writeBookmarks(data);
-    updated.forEach(id => stateUpsert(id, { isRead: read !== false }));
-    res.json({ updated });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1145,14 +1179,16 @@ app.post('/api/read/bulk', (req, res) => {
 
 app.post('/api/read/:id', (req, res) => {
   try {
-    const { id } = req.params;
-    const data = readBookmarks();
-    const bm = data.find(b => b.id === id || b.tweetId === id);
-    if (!bm) return res.status(404).json({ error: 'Not found' });
-    bm.isRead = !bm.isRead;
-    writeBookmarks(data);
-    stateUpsert(bm.id, { isRead: bm.isRead });
-    res.json({ isRead: bm.isRead });
+    withBookmarksLock(() => {
+      const { id } = req.params;
+      const data = readBookmarks();
+      const bm = data.find(b => b.id === id || b.tweetId === id);
+      if (!bm) return res.status(404).json({ error: 'Not found' });
+      bm.isRead = !bm.isRead;
+      writeBookmarks(data);
+      stateUpsert(bm.id, { isRead: bm.isRead });
+      res.json({ isRead: bm.isRead });
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1167,21 +1203,23 @@ app.get('/api/fav-folders', (req, res) => {
 
 app.post('/api/fav-rename', (req, res) => {
   try {
-    const { from, to } = req.body || {};
-    favRenameFolder(from, to);
-    // keep the JSON cache in sync
-    const data = readBookmarks();
-    const f = String(from || '').trim(), t = String(to || '').trim();
-    for (const b of data) {
-      if (Array.isArray(b.favFolders)) {
-        b.favFolders = [...new Set(b.favFolders.map(x => x === f ? t : x))];
-        b.favFolder = b.favFolders[0] || null;
-      } else if (b.favFolder === f) {
-        b.favFolder = t; b.favFolders = [t];
+    withBookmarksLock(() => {
+      const { from, to } = req.body || {};
+      favRenameFolder(from, to);
+      // keep the JSON cache in sync
+      const data = readBookmarks();
+      const f = String(from || '').trim(), t = String(to || '').trim();
+      for (const b of data) {
+        if (Array.isArray(b.favFolders)) {
+          b.favFolders = [...new Set(b.favFolders.map(x => x === f ? t : x))];
+          b.favFolder = b.favFolders[0] || null;
+        } else if (b.favFolder === f) {
+          b.favFolder = t; b.favFolders = [t];
+        }
       }
-    }
-    writeBookmarks(data);
-    res.json({ ok: true });
+      writeBookmarks(data);
+      res.json({ ok: true });
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1190,17 +1228,19 @@ app.post('/api/fav-rename', (req, res) => {
 // Set a bookmark's full favourite-folder set: { folders: ["A","B"] } (empty = unfav).
 app.post('/api/fav/:id', (req, res) => {
   try {
-    const { id } = req.params;
-    let { folders, folder } = req.body || {};
-    if (!Array.isArray(folders)) folders = folder ? [folder] : [];   // back-compat
-    const data = readBookmarks();
-    const bm = data.find(b => b.id === id || b.tweetId === id);
-    if (!bm) return res.status(404).json({ error: 'Not found' });
-    const saved = favSetFolders(bm.id, folders);
-    bm.favFolders = saved;
-    bm.favFolder = saved[0] || null;
-    writeBookmarks(data);
-    res.json({ folders: saved });
+    withBookmarksLock(() => {
+      const { id } = req.params;
+      let { folders, folder } = req.body || {};
+      if (!Array.isArray(folders)) folders = folder ? [folder] : [];   // back-compat
+      const data = readBookmarks();
+      const bm = data.find(b => b.id === id || b.tweetId === id);
+      if (!bm) return res.status(404).json({ error: 'Not found' });
+      const saved = favSetFolders(bm.id, folders);
+      bm.favFolders = saved;
+      bm.favFolder = saved[0] || null;
+      writeBookmarks(data);
+      res.json({ folders: saved });
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1208,15 +1248,17 @@ app.post('/api/fav/:id', (req, res) => {
 
 app.post('/api/label/:id', (req, res) => {
   try {
-    const { id } = req.params;
-    const { color } = req.body;
-    const data = readBookmarks();
-    const bm = data.find(b => b.id === id || b.tweetId === id);
-    if (!bm) return res.status(404).json({ error: 'Not found' });
-    bm.colorLabel = color || null;
-    writeBookmarks(data);
-    stateUpsert(bm.id, { colorLabel: bm.colorLabel });
-    res.json({ colorLabel: bm.colorLabel });
+    withBookmarksLock(() => {
+      const { id } = req.params;
+      const { color } = req.body;
+      const data = readBookmarks();
+      const bm = data.find(b => b.id === id || b.tweetId === id);
+      if (!bm) return res.status(404).json({ error: 'Not found' });
+      bm.colorLabel = color || null;
+      writeBookmarks(data);
+      stateUpsert(bm.id, { colorLabel: bm.colorLabel });
+      res.json({ colorLabel: bm.colorLabel });
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1224,15 +1266,17 @@ app.post('/api/label/:id', (req, res) => {
 
 app.post('/api/note/:id', (req, res) => {
   try {
-    const { id } = req.params;
-    const { note } = req.body;
-    const data = readBookmarks();
-    const bm = data.find(b => b.id === id || b.tweetId === id);
-    if (!bm) return res.status(404).json({ error: 'Not found' });
-    bm.note = note || null;
-    writeBookmarks(data);
-    stateUpsert(bm.id, { note: bm.note });
-    res.json({ note: bm.note });
+    withBookmarksLock(() => {
+      const { id } = req.params;
+      const { note } = req.body;
+      const data = readBookmarks();
+      const bm = data.find(b => b.id === id || b.tweetId === id);
+      if (!bm) return res.status(404).json({ error: 'Not found' });
+      bm.note = note || null;
+      writeBookmarks(data);
+      stateUpsert(bm.id, { note: bm.note });
+      res.json({ note: bm.note });
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1489,7 +1533,27 @@ app.post('/api/classify-ai', (req, res) => {
   }
 
   processBatch(0, () => {
-    try { writeBookmarks(data); } catch {}
+    // The batches above take minutes, so `data` is stale by now: anything
+    // written meanwhile — by this server or another — would be overwritten.
+    // Re-read under the lock and apply only the categories.
+    const labels = new Map(data.filter(b => b.primaryCategory && b.primaryCategory !== 'unclassified')
+      .map(b => [b.id, b.primaryCategory]));
+    try {
+      withBookmarksLock(() => {
+        const fresh = readBookmarks();
+        for (const b of fresh) {
+          const cat = labels.get(b.id);
+          if (cat && (!b.primaryCategory || b.primaryCategory === 'unclassified')) {
+            b.primaryCategory = cat;
+            b.categories = [cat];
+          }
+        }
+        writeBookmarks(fresh);
+      });
+    } catch (e) {
+      console.error(`  [classify-ai] saving categories failed: ${e.message}`);
+      return res.status(500).json({ error: `classified ${done} but could not save them: ${e.message}` });
+    }
     // Into SQLite as well: this endpoint is how the backlog gets cleared, and a
     // label that lives only in bookmarks.json is undone by the next export.
     saveCategoriesToDb(assigned);
@@ -1561,8 +1625,7 @@ function xDbId(bookmark) {
 function saveCategoriesToDb(assigned) {
   if (!assigned.length || !fs.existsSync(DB_PATH)) return 0;
   try {
-    const Database = require('better-sqlite3');
-    const conn = new Database(DB_PATH);
+    const conn = openWritableDb(DB_PATH, { wal: false });
     try {
       const stmt = conn.prepare('UPDATE bookmarks SET primary_category = ?, categories = ? WHERE id = ?');
       let saved = 0;
@@ -1572,6 +1635,7 @@ function saveCategoriesToDb(assigned) {
       return saved;
     } finally { conn.close(); }
   } catch (e) {
+    console.error(`  [classify] saving categories to ${DB_PATH} failed: ${e.message}`);
     logs.classify.push(`Couldn't save categories to the source DB (${e.message}) — they may be re-classified next sync.\n`);
     return 0;
   }

@@ -9,6 +9,7 @@ const { discover } = require('./discover');
 const { agentEnv, buildAgentArgs, fenceUntrusted, spawnAgent } = require('./agent-run');
 const store = require('./sources-store');
 const { writeJsonAtomic, withFileLock, openWritableDb } = require('./durable');
+const favMembership = require('./fav-membership');
 const hn = require('./ingest/hn');
 const yt = require('./ingest/youtube');
 const ytTakeout = require('./ingest/youtube-takeout');
@@ -411,17 +412,9 @@ function favAllFolders() {
 // Replace a bookmark's folder set with `folders` (the desired full list).
 function favSetFolders(id, folders) {
   const conn = requireStateDb();
-  const clean = [...new Set((folders || []).map(f => String(f).trim()).filter(Boolean))];
-  try {
-    const tx = conn.transaction(() => {
-      conn.prepare('DELETE FROM fav_membership WHERE id = ?').run(id);
-      const ins = conn.prepare('INSERT OR IGNORE INTO fav_membership (id, folder, created_at) VALUES (?, ?, ?)');
-      const now = new Date().toISOString();
-      for (const f of clean) ins.run(id, f, now);
-    });
-    tx();
-  } catch (e) { throw stateWriteFailed(`favourite folders for ${id}`, e); }
-  return clean;
+  // Refiling keeps the date it was first favourited (fav-membership.js).
+  try { return favMembership.setFolders(conn, id, folders); }
+  catch (e) { throw stateWriteFailed(`favourite folders for ${id}`, e); }
 }
 
 // Rename a folder everywhere; merges into `to` if it already exists.
@@ -429,16 +422,8 @@ function favRenameFolder(from, to) {
   const conn = requireStateDb();
   const f = String(from || '').trim(), t = String(to || '').trim();
   if (!f || !t || f === t) return;
-  try {
-    const tx = conn.transaction(() => {
-      const ids = conn.prepare('SELECT id FROM fav_membership WHERE folder = ?').all(f).map(r => r.id);
-      const ins = conn.prepare('INSERT OR IGNORE INTO fav_membership (id, folder, created_at) VALUES (?, ?, ?)');
-      const now = new Date().toISOString();
-      for (const id of ids) ins.run(id, t, now);
-      conn.prepare('DELETE FROM fav_membership WHERE folder = ?').run(f);
-    });
-    tx();
-  } catch (e) { throw stateWriteFailed(`folder rename ${f} → ${t}`, e); }
+  try { favMembership.renameFolder(conn, f, t); }
+  catch (e) { throw stateWriteFailed(`folder rename ${f} → ${t}`, e); }
 }
 
 // Overlay state.db onto a bookmark array by id — the DB wins, always.

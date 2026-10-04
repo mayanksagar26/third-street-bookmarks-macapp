@@ -29,6 +29,10 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+**Keywords:** AI bookmark manager for Mac · Twitter/X bookmarks search · chat with your bookmarks (local RAG) ·
+Hacker News and YouTube saved-items library · local-first, privacy-first · Tauri 2 + Rust · Claude Code and Codex CLI.
+*Last updated 4 October 2026 (v1.2.0).*
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

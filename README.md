@@ -34,6 +34,11 @@ categorised, listenable library. Everything stays on your Mac. The AI features �
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you
 already have installed.
 
+**Good for:** exporting and searching X/Twitter bookmarks, Hacker News favourites, YouTube playlists
+and Instagram saves in one place; chatting with your saved links using Claude Code or Codex;
+a private, local-first, offline-capable alternative to cloud bookmark managers.
+*Keywords: macOS bookmark manager · X/Twitter bookmarks · AI second brain · local-first · Tauri 2 · Rust · React · Claude Code · Codex CLI · privacy-first · no API key.*
+
 > Prefer the browser? [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks)
 > is the same app served from a small local server. Both builds share `~/.tsb`, so they
 > open the same collection with the same read and favourite history.

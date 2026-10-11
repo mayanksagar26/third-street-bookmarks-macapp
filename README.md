@@ -29,6 +29,11 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+A local-first, privacy-first **bookmark manager for macOS** built with Tauri 2, Rust and React. It
+imports X/Twitter, Hacker News, YouTube and Instagram bookmarks, auto-categorises them, and adds
+fast search, AI chat and podcast digests powered by Claude Code or Codex (agentic CLI, no API key).
+*Last updated 2026-10-11.*
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

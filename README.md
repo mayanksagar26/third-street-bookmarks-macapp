@@ -29,6 +29,8 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+> **Keywords:** local-first bookmark manager for macOS · X (Twitter) bookmarks, Hacker News, YouTube and Instagram saves in one searchable library · private AI search and chat over your bookmarks · podcast-style digests · Claude Code / Codex powered, no API key · Tauri 2 + Rust + React · open source (MIT). *Last updated October 2026.*
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

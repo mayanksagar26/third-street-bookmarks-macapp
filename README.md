@@ -27,10 +27,12 @@
   <img src="https://img.shields.io/badge/license-MIT-black" alt="MIT">
 </p>
 
+<p align="center"><sub>Updated October 2026 · v1.2.0 · <code>macos</code> <code>tauri</code> <code>bookmark-manager</code> <code>local-first</code> <code>claude-code</code> <code>codex</code> <code>second-brain</code> <code>privacy</code></sub></p>
+
 ![The feed](docs/screenshots/02-feed.png)
 
-A native macOS app that gathers everything you bookmark into one searchable,
-categorised, listenable library. Everything stays on your Mac. The AI features —
+A local-first, open-source macOS bookmark manager (Tauri 2 + Rust + React) that gathers everything you bookmark into one searchable,
+categorised, listenable library — a private, offline-capable "second brain" for X, Hacker News, YouTube and Instagram saves. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you
 already have installed.
 

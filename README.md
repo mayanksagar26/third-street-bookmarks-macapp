@@ -29,6 +29,12 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+**Keywords:** macOS bookmark manager · local-first · Tauri 2 · Rust · Claude Code · Codex CLI ·
+AI chat over your bookmarks · Twitter/X bookmarks export · Hacker News · YouTube · podcast digests ·
+privacy-first, no API key.
+
+*Updated 16 October 2026 · v1.2.0.*
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

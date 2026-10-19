@@ -29,6 +29,8 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+**Keywords:** local-first bookmark manager · Twitter/X bookmarks · Hacker News · YouTube playlists · Instagram saved · AI second brain · chat with your bookmarks (RAG) · Claude Code · Codex CLI · Tauri 2 · privacy-first, no API key.
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

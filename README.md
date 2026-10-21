@@ -29,7 +29,9 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
-A native macOS app that gathers everything you bookmark into one searchable,
+A private, local-first AI bookmark manager for macOS (built with Tauri 2, Rust and Node) — a
+second brain for your X/Twitter, Hacker News, YouTube and Instagram saves, with Claude Code and
+Codex powered chat, podcast digests and semantic search. It gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you
 already have installed.

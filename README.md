@@ -29,7 +29,8 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
-A native macOS app that gathers everything you bookmark into one searchable,
+A native macOS **bookmark manager with local AI** — a private, offline-first alternative to
+read-later and X (Twitter) bookmark tools. It gathers everything you save into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you
 already have installed.
@@ -37,6 +38,10 @@ already have installed.
 > Prefer the browser? [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks)
 > is the same app served from a small local server. Both builds share `~/.tsb`, so they
 > open the same collection with the same read and favourite history.
+
+<sub>**Keywords:** macOS bookmark manager · X/Twitter bookmarks export · Hacker News · YouTube playlists ·
+local-first · local AI · Claude Code · Codex CLI · Tauri 2 · Rust · Node.js · RAG chat · podcast digest.
+Current release **v1.2.0** · README refreshed 22 October 2026.</sub>
 
 ---
 

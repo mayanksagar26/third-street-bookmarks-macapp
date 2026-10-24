@@ -29,6 +29,8 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+*Local-first macOS bookmark manager · Tauri 2 · AI chat with your X, Hacker News, YouTube and Instagram saves · powered by Claude Code or Codex · privacy-first, no API key.*
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

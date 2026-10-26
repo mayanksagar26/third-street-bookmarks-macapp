@@ -29,6 +29,8 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+<p align="center"><sub>Local-first · privacy-first · AI bookmark manager · X/Twitter bookmarks · Hacker News · YouTube · Instagram · Claude Code · Codex · Tauri 2 · Rust · RAG chat · podcast digests · Last updated 26 October 2026</sub></p>
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

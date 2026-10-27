@@ -29,6 +29,26 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+**Third Street Bookmarks is a free, open-source, local-first bookmark manager for macOS** —
+a private "second brain" for your saved X (Twitter) bookmarks, Hacker News favourites,
+YouTube Watch Later and Instagram saves. Built with Tauri 2, Rust and React, with
+full-text search, AI chat that cites your own saves (RAG over your library), automatic
+categorising and podcast-style audio digests. Works with Claude Code and Codex, so there is
+no API key, no cloud and no account.
+
+*Last updated: 27 October 2026 · v1.2.0 · actively maintained*
+
+**Why it exists:** bookmarks pile up across five apps and never get read again. This puts
+them in one library you can search, ask questions of, and listen to, while the data stays
+on your machine.
+
+| Looking for… | Here |
+|---|---|
+| A bookmark manager that is offline and private | Everything lives in `~/.tsb` on your Mac |
+| An X / Twitter bookmarks organiser or exporter | [Sources](#sources) |
+| Chat with your bookmarks using Claude Code or Codex | [Categorising](#categorising), AI chat |
+| A Tauri 2 + Node sidecar reference app | [How it fits together](#how-it-fits-together) |
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

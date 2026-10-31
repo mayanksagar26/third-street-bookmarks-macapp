@@ -29,7 +29,13 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
-A native macOS app that gathers everything you bookmark into one searchable,
+**Third Street Bookmarks** is a local-first, privacy-first bookmark manager for macOS
+(Apple Silicon): a native Tauri 2 app with an AI chat over your saved X (Twitter) posts,
+Hacker News stories, YouTube videos and Instagram saves. It runs on Claude Code or Codex
+instead of an API key, and keeps everything in a local SQLite library. Last updated
+October 2026.
+
+It gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you
 already have installed.

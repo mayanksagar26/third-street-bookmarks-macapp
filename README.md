@@ -29,6 +29,10 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+**Local-first AI bookmark manager for macOS** — a native Tauri 2 app (Apple Silicon) to search, categorise, chat with and listen to your X, Hacker News, YouTube and Instagram bookmarks. Private by design: no API key, no upload, no account. Works with Claude Code and Codex CLI. *Last updated 2 Nov 2026 · current release v1.2.0.*
+
+<sub>Topics: local-first · privacy-first AI · bookmark manager · second brain · read-it-later · Claude Code · Codex · Tauri · Rust · macOS · Apple Silicon · semantic search · RAG · podcast digest</sub>
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

@@ -29,6 +29,17 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+**A local-first, privacy-first bookmark manager for macOS** — a native Tauri 2 + Rust app
+for Apple Silicon that unifies X (Twitter) bookmarks, Hacker News, YouTube playlists and
+Watch Later, Instagram saves and any link into one searchable library. Chat with your
+bookmarks (RAG-style, with citations), turn them into podcast digests, and categorise
+them offline — using the Claude Code or Codex CLI you already have, with no API key.
+
+<sub>**Topics:** bookmark manager · second brain · local-first · offline-first · macOS app ·
+Tauri · Rust · AI agents · Claude Code · Codex CLI · MCP-ready roadmap (ACP) ·
+X/Twitter bookmarks export · Hacker News reader · YouTube Takeout · Instagram saved posts ·
+semantic search · text-to-speech podcast · open source (MIT) · last updated 4 Nov 2026</sub>
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

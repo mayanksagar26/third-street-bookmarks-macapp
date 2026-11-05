@@ -29,6 +29,11 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+> **Local-first AI bookmark manager for macOS** — a privacy-first alternative to cloud read-later and
+> X/Twitter bookmark tools. Search, RAG chat with citations, podcast-style digests and auto-categorisation
+> over your saved X, Hacker News, YouTube and Instagram links, using Claude Code or Codex locally.
+> Built with Tauri 2, Rust, Node and React · Apple Silicon · MIT · *Last updated: 5 November 2026 (v1.2.0)*
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

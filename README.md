@@ -11,6 +11,12 @@
 </p>
 
 <p align="center">
+  <sub>Local-first bookmark manager for macOS · Tauri 2 + Rust · chat with your bookmarks using Claude Code or Codex CLI ·
+  X (Twitter), Hacker News, YouTube &amp; Instagram saved-posts importer · offline categorisation · privacy-first, open source (MIT)<br>
+  Last updated: 9 November 2026</sub>
+</p>
+
+<p align="center">
   <a href="https://github.com/mayanksagar26/third-street-bookmarks-macapp/releases/latest"><strong>Download for macOS</strong></a> ·
   <a href="#install">Install</a> ·
   <a href="#what-it-looks-like">What it looks like</a> ·

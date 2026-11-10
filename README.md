@@ -5,9 +5,9 @@
 <h1 align="center">Third Street Bookmarks</h1>
 
 <p align="center">
-  <strong>Everything you bookmark, in one place you can search, read and listen to.</strong><br>
-  X, Hacker News, YouTube, Instagram and any loose link — one categorised library on your Mac.<br>
-  The AI runs on the coding CLI you already have. No API key, no upload, no account.
+  <strong>A local-first, privacy-first AI bookmark manager for macOS.</strong><br>
+  Search, read and listen to your X, Hacker News, YouTube and Instagram saves in one library.<br>
+  Chat with your bookmarks using the Claude Code or Codex CLI you already have. No API key, no upload, no account.
 </p>
 
 <p align="center">
@@ -26,6 +26,14 @@
   <img src="https://img.shields.io/badge/Tauri-2-black" alt="Tauri 2">
   <img src="https://img.shields.io/badge/license-MIT-black" alt="MIT">
 </p>
+
+<sub>Last updated November 2026 · v1.2.0 · Apple Silicon · MIT</sub>
+
+**Why it exists:** saved posts, videos and links pile up in a dozen apps and never get
+read. This pulls them into one on-device library with full-text search, AI categorising,
+chat that cites its sources, and podcast-style digests. Your data stays in `~/.tsb` on your Mac.
+
+<sub>**Topics:** bookmark manager · second brain · local-first · offline-first · on-device AI · RAG chat over your bookmarks · Claude Code · Codex CLI · Tauri 2 · Rust · macOS menu-bar-free native app · X/Twitter bookmarks · Hacker News · YouTube playlists · Instagram saved · privacy-first · open source</sub>
 
 ![The feed](docs/screenshots/02-feed.png)
 

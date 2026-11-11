@@ -34,6 +34,18 @@ categorised, listenable library. Everything stays on your Mac. The AI features �
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you
 already have installed.
 
+### Why it exists
+
+| | Cloud read-later apps | Third Street Bookmarks |
+|---|---|---|
+| Where your library lives | Their servers | `~/.tsb` on your Mac (SQLite + JSON) |
+| AI features | Their model, their bill | **Bring your own agent** — Claude Code or Codex CLI, no API key |
+| Sources | Usually one, maybe two | X, Hacker News, YouTube, Instagram, any URL |
+| Account | Required | None |
+| Offline categorising | — | Regex, or [Laya](#categorising) trained on your own labels |
+
+Local-first, open source (MIT), native on Apple Silicon.
+
 > Prefer the browser? [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks)
 > is the same app served from a small local server. Both builds share `~/.tsb`, so they
 > open the same collection with the same read and favourite history.

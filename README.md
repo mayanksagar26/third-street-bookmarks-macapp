@@ -34,6 +34,18 @@ categorised, listenable library. Everything stays on your Mac. The AI features â
 chat, explanations, podcast digests â€” run on Claude Code or Codex, whichever you
 already have installed.
 
+**Why it exists.** Read-later services keep shutting down, and taking your saves with them.
+This one has no server to shut down: a local-first, open-source bookmark manager and
+read-later app, with your library in a plain folder (`~/.tsb`) you own. It bundles no AI of
+its own; it uses the coding agent you already pay for.
+
+| | |
+|---|---|
+| **Local-first** | SQLite + JSON on your disk. No account, no cloud sync, no telemetry. |
+| **Bring your own agent** | Chat, explanations and podcast digests run on Claude Code or Codex CLI. Categorising can run fully offline. |
+| **One library, every source** | X/Twitter bookmarks, Hacker News, YouTube playlists and Watch Later, Instagram saved posts, any URL. |
+| **Native Mac app** | Tauri 2 shell around a supervised Node sidecar, packaged as an Apple Silicon `.dmg`. |
+
 > Prefer the browser? [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks)
 > is the same app served from a small local server. Both builds share `~/.tsb`, so they
 > open the same collection with the same read and favourite history.

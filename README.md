@@ -38,10 +38,30 @@ already have installed.
 > is the same app served from a small local server. Both builds share `~/.tsb`, so they
 > open the same collection with the same read and favourite history.
 
+### Why it exists
+
+Pocket shut down in 2025, Omnivore a year before it, and the read-later apps that
+remain keep your library on their servers. Meanwhile most of what people save now
+lives inside X, YouTube and Instagram, where it can't be searched together. Third
+Street Bookmarks is the local-first answer:
+
+| | Third Street Bookmarks | Typical read-later / bookmark SaaS |
+|---|---|---|
+| Where your library lives | `~/.tsb` on your Mac, plain JSON + SQLite | Their servers |
+| X, YouTube, Instagram saves | One library, one search | Separate apps, if at all |
+| AI chat over your bookmarks | Your own Claude Code or Codex CLI, with citations | Paid tier or none |
+| API key / account | None | Account required |
+| Shuts down if the company does | No — MIT-licensed, the library works offline | Yes |
+
+<sub>Good fit if you were searching for: a **Pocket alternative**, an **X / Twitter
+bookmarks export and search**, a **self-hosted read-later app for macOS**, or a way to
+**chat with your bookmarks** using a local AI agent.</sub>
+
 ---
 
 ## Contents
 
+- [Why it exists](#why-it-exists) — a local-first Pocket alternative
 - [Install](#install) — download, with your coding CLI, or by hand
 - [What it looks like](#what-it-looks-like)
 - [Sources](#sources) — X, Hacker News, YouTube, Instagram, links

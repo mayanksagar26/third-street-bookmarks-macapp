@@ -29,6 +29,11 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+> **Local-first · privacy-first · agent-native.** An open-source macOS bookmark manager
+> (Tauri 2 + React + Node) with on-device categorisation, AI chat over your saved links,
+> and podcast digests — powered by your own Claude Code or Codex CLI. No cloud, no API key.
+> *Last updated: 16 Nov 2026 · v1.2.0 · Apple Silicon.*
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you
@@ -37,6 +42,18 @@ already have installed.
 > Prefer the browser? [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks)
 > is the same app served from a small local server. Both builds share `~/.tsb`, so they
 > open the same collection with the same read and favourite history.
+
+---
+
+### Why this one
+
+- **Local-first:** your library lives in `~/.tsb`; nothing is uploaded.
+- **Bring your own agent:** chat, explanations and digests run on the Claude Code or Codex CLI you already pay for.
+- **One library, many sources:** X, Hacker News, YouTube, Instagram and loose links, searchable together.
+- **Hardened by default:** loopback-only, per-launch bearer token, read-only agent sandbox ([details](#security-model)).
+- **Works with MCP:** pairs with an MCP server so other AI assistants can search what you saved.
+
+<sub>Keywords: bookmark manager for Mac, Twitter/X bookmarks export, Hacker News saved stories, YouTube Watch Later import, Instagram saved posts export, local-first AI, Claude Code, Codex CLI, Tauri macOS app, Apple Silicon, second brain, read-it-later.</sub>
 
 ---
 

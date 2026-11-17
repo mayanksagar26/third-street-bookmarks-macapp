@@ -29,6 +29,8 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+<p align="center"><sub>Local-first · privacy-first · AI bookmark manager for Mac · Tauri 2 + Rust + React · works with Claude Code &amp; Codex CLI · offline categorising with Laya · Last updated 17 Nov 2026 (v1.2.0)</sub></p>
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you
@@ -37,6 +39,11 @@ already have installed.
 > Prefer the browser? [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks)
 > is the same app served from a small local server. Both builds share `~/.tsb`, so they
 > open the same collection with the same read and favourite history.
+
+**Why it exists:** X, Hacker News, YouTube and Instagram each hide your saves in their own
+silo. This is a local-first, open-source alternative to read-it-later and bookmark
+managers — one searchable library, AI chat that cites your own saves, and podcast
+digests, with no cloud and no API key.
 
 ---
 

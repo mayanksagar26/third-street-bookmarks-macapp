@@ -29,6 +29,12 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+**Keywords:** bookmark manager · read-it-later · second brain · local-first · privacy-first ·
+Tauri 2 macOS app · Claude Code · Codex CLI · AI chat over your bookmarks · podcast digests ·
+X / Twitter bookmarks export · Hacker News · YouTube playlists · Instagram saved · SQLite.
+
+<sub>Last updated: 19 Nov 2026 · v1.2.0</sub>
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

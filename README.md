@@ -11,6 +11,10 @@
 </p>
 
 <p align="center">
+  <sub>Local-first AI bookmark manager for macOS · Tauri 2 · Rust · React · Claude Code &amp; Codex · MCP-ready · privacy-first, offline-friendly · X / Twitter, Hacker News, YouTube &amp; Instagram bookmarks</sub>
+</p>
+
+<p align="center">
   <a href="https://github.com/mayanksagar26/third-street-bookmarks-macapp/releases/latest"><strong>Download for macOS</strong></a> ·
   <a href="#install">Install</a> ·
   <a href="#what-it-looks-like">What it looks like</a> ·
@@ -616,6 +620,10 @@ This app stands on other people's work. Thank you.
 
 Built on [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks),
 the browser build of the same app.
+
+<sub>Keywords: bookmark manager, read-it-later, Pocket alternative, Raindrop alternative, X/Twitter bookmarks export, Hacker News favourites, YouTube playlists, Instagram saved posts, second brain, personal knowledge management, local-first, self-hosted, on-device AI, Mac app, Tauri.</sub>
+
+<sub>README refreshed 20 November 2026.</sub>
 
 <sub>Screenshots show the bundled sample collection plus public Hacker News stories,
 3Blue1Brown's public playlists and a few web links — not real bookmark data. The

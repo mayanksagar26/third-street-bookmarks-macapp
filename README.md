@@ -5,9 +5,9 @@
 <h1 align="center">Third Street Bookmarks</h1>
 
 <p align="center">
-  <strong>Everything you bookmark, in one place you can search, read and listen to.</strong><br>
-  X, Hacker News, YouTube, Instagram and any loose link — one categorised library on your Mac.<br>
-  The AI runs on the coding CLI you already have. No API key, no upload, no account.
+  <strong>A private, local-first bookmark manager for macOS, with AI chat over everything you save.</strong><br>
+  X (Twitter), Hacker News, YouTube, Instagram and any loose link — one categorised library on your Mac.<br>
+  The AI runs on the coding CLI you already have (Claude Code or Codex). No API key, no upload, no account.
 </p>
 
 <p align="center">
@@ -23,7 +23,9 @@
 <p align="center">
   <a href="https://github.com/mayanksagar26/third-street-bookmarks-macapp/actions/workflows/ci.yml"><img src="https://github.com/mayanksagar26/third-street-bookmarks-macapp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/macOS-11%2B-black" alt="macOS 11+">
+  <img src="https://img.shields.io/badge/Apple%20Silicon-native-black" alt="Apple Silicon">
   <img src="https://img.shields.io/badge/Tauri-2-black" alt="Tauri 2">
+  <img src="https://img.shields.io/badge/local--first-no%20cloud-black" alt="Local-first">
   <img src="https://img.shields.io/badge/license-MIT-black" alt="MIT">
 </p>
 
@@ -33,6 +35,16 @@ A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you
 already have installed.
+
+**Why it exists:** bookmarks scatter across X, YouTube, Hacker News and Instagram, and
+each app hides them behind its own feed. This pulls them into one place you own, so you
+can ask *"what did I save about local-first software?"* and get an answer with citations.
+
+**In short:** local-first · privacy-first · AI agents on your own CLI · Tauri 2 + Rust ·
+X/Twitter bookmarks, YouTube Watch Later, Instagram saved posts, Hacker News · v1.2.0 for
+Apple Silicon · MIT.
+
+<sub>Last updated: 21 Nov 2026</sub>
 
 > Prefer the browser? [third-street-bookmarks](https://github.com/mayanksagar26/third-street-bookmarks)
 > is the same app served from a small local server. Both builds share `~/.tsb`, so they

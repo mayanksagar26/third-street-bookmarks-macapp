@@ -29,6 +29,8 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+**Keywords:** local-first · bookmark manager · read-it-later · AI second brain · Tauri 2 · Rust · macOS (Apple Silicon) · Claude Code · Codex CLI · privacy-first · no API key.
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

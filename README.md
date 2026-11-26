@@ -29,6 +29,10 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+<p align="center"><sub>Updated 26 November 2026 · v1.2.0 · Apple Silicon · MIT</sub></p>
+
+**Keywords:** macOS bookmark manager · local-first · Tauri 2 + Rust · AI second brain · Claude Code / Codex CLI · X (Twitter) bookmarks export · Hacker News saved · YouTube · Instagram · SQLite · privacy-first, no API key.
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you

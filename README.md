@@ -29,6 +29,12 @@
 
 ![The feed](docs/screenshots/02-feed.png)
 
+> **Local-first AI bookmark manager for Mac** — a private, offline alternative to
+> Raindrop, Pocket and Readwise. Built with Tauri 2, Rust, React and Node. Works with
+> Claude Code and Codex CLI, with an AI chat over your saved links and no API key.
+> Imports X (Twitter) bookmarks, Hacker News, YouTube playlists, Instagram saves and
+> any URL. *Last updated 2026-11-27.*
+
 A native macOS app that gathers everything you bookmark into one searchable,
 categorised, listenable library. Everything stays on your Mac. The AI features —
 chat, explanations, podcast digests — run on Claude Code or Codex, whichever you
